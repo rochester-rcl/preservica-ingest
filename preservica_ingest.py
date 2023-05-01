@@ -11,6 +11,9 @@ from pyrsistent import thaw
 from zipfile import ZipFile
 from os.path import basename
 from pyPreservica import *
+from cleanup_dates import *
+from openpyxl import load_workbook
+from deepdiff import DeepDiff
 
 client = EntityAPI()
 
@@ -19,11 +22,41 @@ client = EntityAPI()
 # 1 - container
 
 #Windows Project Path
-proj_path = 'insert windows project path'
+#proj_path = 'windows path to project folder'
 #Linux Project Path
-# proj_path = 'insert linux project path'
+# proj_path = 'linux path to project folder'
 
 proj_log_file = os.path.join(proj_path, 'project_log.txt')
+
+def work_order_cleanup():
+    filename = r'Excel project spreadsheet based on NYU plugin output after Lisa works with it'
+    wb = load_workbook(filename)
+    ws = wb['digitization_work_order_report']
+    #review bounds of spreadsheet, espcially maxrow
+    #columns may change depending on what columns deleted
+    mincol = 10
+    maxcol = 10
+    minrow = 2
+    maxrow = 151
+    iterrow = 2
+    cuidcol = 7
+    filecol = 10
+    datecol = 9
+    # Miner = 'MED001'
+    # RBSCP UA = 'RCL001'
+    # Robbins = 'RCL002'
+    # RBSCP HM = 'RCL003'
+    # RBSCP BK = 'RCL004'
+    orgid = 'RCL003'
+    for row in ws.iter_rows(min_row = minrow, min_col = mincol, max_row = maxrow, max_col = maxcol):
+        for cell in row:
+            filevar = orgid + '_' + ws.cell(row = iterrow, column = cuidcol).value
+            ws.cell(row = iterrow, column = filecol).value = filevar
+            iterrow += 1
+            if ws.cell(row = iterrow, column=datecol).value == None:
+                ws.cell(row = iterrow, column=datecol).value = 'undated'
+    wb.save(filename)
+# work_order_cleanup()
 
 #this function takes the folder containing all the preservation masters and renames to be the "container" folder which will ultimately be used for OPEX incremental ingest
 #also creates a "project_log.txt" file to store variables so that an ingest project can be worked on over multiple sessions
@@ -36,29 +69,15 @@ def create_container():
     container = 'container_' + date_time
     os.mkdir(os.path.join(proj_path, container))
     project_log_hand.write(container + '\n')
-    for file in os.listdir(path = proj_path):
+    temp_folder = os.path.join(proj_path, 'DPS001_2022-09_RFP_phase3')
+    for file in os.listdir(path = temp_folder):
         if file.endswith('.tif'):
-            shutil.move(os.path.join(proj_path, file), os.path.join(proj_path, container, file))
+            shutil.move(os.path.join(proj_path, temp_folder, file), os.path.join(proj_path, container, file))
     print('Container directory: {} and moved digital assets into it'.format(container))
     project_log_hand.close()
 # create_container()
 
-#this function creates a text file with a list of all files delivered by DS to do quality assurance against
-def file_list():
-    print('----CREATING FILE MANIFEST----')
-    fhand = open('filelist.txt', 'w')
-    project_log_hand = open(proj_log_file, 'r')
-    vars = project_log_hand.readlines()
-    project_log_hand.close()
-    container = vars[1].strip()
-    path_container = os.path.join(proj_path, container)
-    for file in os.listdir(path = path_container):
-        fhand.write(file + '\n')
-    fhand.close()
-# file_list()
-
-#this function takes all of the preservation master files that come from DS in one big directory and splits them up into
-#subdirectories containing all the images for a articular resource
+#This function creates paths to the folders and files and then moves the files to their respective folders. 
 def folder_ds_files():
     print('----CREATING FOLDER STRUCTURE FOR PRESERVATION MASTERS----')
     project_log_hand = open(proj_log_file, 'r')
@@ -67,40 +86,31 @@ def folder_ds_files():
     container = vars[1].strip()
     folder_count = 0
     file_count = 0
-    folder_name = ''
+    folder_list = list()
     path_container = os.path.join(proj_path, container)
     for file in os.listdir(path = path_container):
-        path_containerfile = os.path.join(proj_path, container, file)
-        if os.path.isdir(path_containerfile) == True:
+        file_root = file.split('-')[0].strip()
+        if file_root not in folder_list:
+            folder_list.append(file_root)
+            print('added {} to folder_list'.format(file_root))
+    for file_root in folder_list:
+        path_folder = os.path.join(proj_path, container, file_root)
+        os.mkdir(path_folder)
+        print('created {}'.format(path_folder))
+        folder_count += 1
+    for file in os.listdir(path = path_container):
+        if os.path.isdir(file) == True:
             continue
         else:
-            file_root = file.split('-')[0]
-            file_root_parts = file_root.split('_')
-            new_folder_name = file_root_parts[0].strip() + '_' + file_root_parts[1].strip()
-            if new_folder_name.find('.') != -1:
-                folder_name = file.split('.')[0].strip()
-                path_foldername = os.path.join(proj_path, container, folder_name)
-                path_foldernamefile = os.path.join(proj_path, container, folder_name, file)
-                os.mkdir(path_foldername)
-                folder_count += 1
-                shutil.move(path_containerfile, path_foldernamefile)
-            else:
-                if new_folder_name == folder_name:
-                    path_foldername = os.path.join(proj_path, container, folder_name)
-                    path_foldernamefile = os.path.join(proj_path, container, folder_name, file)
-                    shutil.move(path_containerfile, path_foldernamefile)
-                    file_count += 1
-                else:
-                    folder_name = new_folder_name
-                    path_foldername = os.path.join(proj_path, container, folder_name)
-                    path_foldernamefile = os.path.join(proj_path, container, folder_name, file)
-                    os.mkdir(path_foldername)
-                    folder_count += 1
-                    shutil.move(path_containerfile, path_foldernamefile)
-                    file_count += 1
-        print('{} created'.format(folder_name))
-    print('Created and renamed {} subdirectories and moved {} files into them'.format(folder_count, file_count))
-# folder_ds_files()
+            path_file = os.path.join(proj_path, container, file)
+            file_prefix = file.split('-')[0].strip()
+            path_folder = os.path.join(proj_path, container, file_prefix, file)
+            shutil.move(path_file, path_folder)
+            print('moved {} to {}'.format(path_file, path_folder))
+            file_count += 1
+    print('created {} folders'.format(folder_count))
+    print('moved {} files'.format(file_count))   
+# folder_ds_files()            
 
 #this function begins the process of creating the PAX structure necessary for ingest
 #"Representation_Preservation" folder is created, and each image is given a separate subdir inside of it
@@ -218,7 +228,7 @@ def pax_metadata():
             pax_read = pax_hand.read()
             sha1_checksum = hashlib.sha1(pax_read).hexdigest()
             pax_hand.close()
-            id_file_hand = open('refid_aonum_cuid_p2_path.txt', 'r')
+            id_file_hand = open('txt file containing ASpace ref|archival_object_number|title|date|cuid', 'r')
             id_file_lines = id_file_hand.readlines()
             id_file_hand.close()
             for line in id_file_lines:
@@ -226,39 +236,11 @@ def pax_metadata():
                 if cuid == directory:
                     ref_id = line.split('|')[0].strip()
                     title = line.split('|')[2].strip()
+                    if '&' in title:
+                        title = title.replace('&', 'and')
                     date_full = line.split('|')[3].strip()
-                    if date_full == 'undated':
-                        display_title = '{title} (undated)'.format(title=title)
-                    else:
-                        date_iso = date_full.split()[1].strip()
-                        date_year = date_iso.split('-')[0].strip()
-                        date_month = date_iso.split('-')[1].strip()
-                        if date_month == '01':
-                            date_month = 'January'
-                        elif date_month == '02':
-                            date_month = 'February'
-                        elif date_month == '03':
-                            date_month = 'March'
-                        elif date_month == '04':
-                            date_month = 'April'
-                        elif date_month == '05':
-                            date_month = 'May'
-                        elif date_month == '06':
-                            date_month = 'June'
-                        elif date_month == '07':
-                            date_month = 'July'
-                        elif date_month == '08':
-                            date_month = 'August'
-                        elif date_month == '09':
-                            date_month = 'September'
-                        elif date_month == '10':
-                            date_month = 'October'
-                        elif date_month == '11':
-                            date_month = 'November'
-                        elif date_month == '12':
-                            date_month = 'December'
-                        date_day = int(date_iso.split('-')[2].strip())
-                        display_title = '{title}, {date_month} {date_day}, {date_year}'.format(title=title, date_month=date_month, date_day=date_day, date_year=date_year)
+                    date_formatted = aspace_dates(date_full)
+                    display_title = '{title}{date_formatted}'.format(title=title, date_formatted=date_formatted)
                     opex = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <opex:OPEXMetadata xmlns:opex="http://www.openpreservationexchange.org/opex/v1.0">
     <opex:Transfer>
@@ -286,6 +268,9 @@ def pax_metadata():
                     dir_count += 1
         except:
             print('ERROR: {}'.format(directory))
+            project_log_hand = open(proj_log_file, 'a')
+            project_log_hand.write(directory + '\n')
+            project_log_hand.close()
     print('Created {} OPEX metdata files for individual assets'.format(dir_count))
 # pax_metadata()
 
@@ -299,7 +284,7 @@ def ao_opex_metadata():
     container = vars[1].strip()
     project_log_hand.close()
     file_count = 0
-    id_hand = open(os.path.join(proj_path, 'refid_aonum_cuid_p2.txt'), 'r')
+    id_hand = open(os.path.join(proj_path, 'txt file containing ASpace ref|archival_object_number|title|date|cuid'), 'r')
     id_list = id_hand.readlines()
     id_hand.close()
     path_container = os.path.join(proj_path, container)
@@ -316,23 +301,24 @@ def ao_opex_metadata():
                     ao_num_full = 'archival_object_' + ao_num
                     opex = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <opex:OPEXMetadata xmlns:opex="http://www.openpreservationexchange.org/opex/v1.0">
-<opex:Properties>
-    <opex:Title>{ao_num}</opex:Title>
-    <opex:Identifiers>
-        <opex:Identifier type="code">{ao_num}</opex:Identifier>
-    </opex:Identifiers>
-</opex:Properties>
-<opex:DescriptiveMetadata>
-    <LegacyXIP xmlns="http://preservica.com/LegacyXIP">
-        <Virtual>false</Virtual>
-    </LegacyXIP>
-</opex:DescriptiveMetadata>
+    <opex:Properties>
+        <opex:Title>{ao_num}</opex:Title>
+        <opex:Identifiers>
+            <opex:Identifier type="code">{ao_num}</opex:Identifier>
+        </opex:Identifiers>
+    </opex:Properties>
+    <opex:DescriptiveMetadata>
+        <LegacyXIP xmlns="http://preservica.com/LegacyXIP">
+            <Virtual>false</Virtual>
+        </LegacyXIP>
+    </opex:DescriptiveMetadata>
 </opex:OPEXMetadata>'''.format(ao_num = ao_num_full)
                     ao_md_hand = open(os.path.join(path_directory, ao_num_full + '.opex'), 'w')
                     ao_md_hand.write(opex)
                     ao_md_hand.close()
                     os.rename(path_directory, os.path.join(proj_path, container, ao_num_full))
                     file_count += 1
+        print('processed folder metadata in new foldername: {}'.format(ao_num_full))
     print('Created {} archival object metadata files'.format(file_count))
 # ao_opex_metadata()
 
@@ -390,7 +376,7 @@ def move_aspace_trash():
     dest_folder = client.folder(new_folder.reference)
     for entity in aspace_folder:
         test_var = entity.title
-        if test_var.find('archival_object_') != -1:
+        if test_var.startswith('archival_object_'):
             client.move(entity, dest_folder)
             count += 1
             print('moving item {}'.format(str(count)))
@@ -403,7 +389,7 @@ def move_aspace_trash():
 def dps_identifier():
     print('----ADDING DPS IDENTIFIERS----')
     count = 0
-    id_hand = open(os.path.join(proj_path, 'refid_aonum_cuid.txt'), 'r')
+    id_hand = open(os.path.join(proj_path, 'txt file containing ASpace ref|archival_object_number|title|date|cuid'), 'r')
     id_list = id_hand.readlines()
     id_hand.close()
     for line in id_list:
@@ -421,7 +407,7 @@ def dps_identifier():
 #into the PREMIS generator CSV file
 def ref_pull():
     print('----OUTPUTTING ALL THE ASSET REFS TO TERMINAL----')
-    folder = client.folder("8e071708-82df-4106-8127-f7d79fe29dfd")
+    folder = client.folder("Preservica folder that new assets were ingested into")
     for asset in filter(only_assets, client.all_descendants(folder.reference)):
         print(asset.reference)
 # ref_pull()
@@ -430,8 +416,8 @@ def ref_pull():
 def premis_generator():
     print('----CREATING PREMIS RECORDS----')
     premis_folder = os.path.join(proj_path, 'premis')
-    os.mkdir(premis_folder)
-    fhand = open('DPS-2022-0001-premis-phase2-supplement.csv', 'r')
+    # os.mkdir(premis_folder)
+    fhand = open('csv file that contains PREMIS information to go into template', 'r')
     csv_reader = csv.reader(fhand, delimiter=',')
     count = 0
     for row in csv_reader:
@@ -511,6 +497,7 @@ def premis_generator():
 
 #this function attaches the PREMIS records created in the previous function
 #to their corresponding digital assets in Preservica
+#NOTE MAKE SURE THAT THE NUMBER OF LINES IN CSV MATCHES NUMBER OF ASSETS BEING INGESTED!!!!!!!!
 def premis_attach():
     print('----ATTACHING PREMIS RECORDS TO ASSETS----')
     count = 0
@@ -525,31 +512,34 @@ def premis_attach():
     print('attached {} PREMIS files'.format(count))
 # premis_attach()
 
-#this function counts the number of assets in the root folder for QA purposes
-def count_assets():
-    print('----COUNTING ASSETS----')
-    root_folder = client.folder("f31c947b-2be3-493f-9cc5-f21ad9dd44c8")
-    count = 0
-    for entity in filter(only_assets, client.all_descendants(root_folder.reference)):
-        print(entity.reference)
-        count += 1
-    print('total of {} assets'.format(count))
-# count_assets()
-
-#this function needs to be completed! below can output all the filenames in a given folder
-#TODO however it needs to be compared to a file manifest from what Lisa provides to validate
-#succesful transfer of all files have been accounted for!
+#this function generates a dictionary of filename:hash values for both the Droid file manifest
+#and the ingested Preservica assets (using the Preservica API) and then compares the two to
+#ensure they are identical, and provides a report if that is not the case
 def quality_control():
-    root_folder = client.folder("f31c947b-2be3-493f-9cc5-f21ad9dd44c8")
+    print('---STARTING QA---')
+    preservicadict = dict()
+    droiddict = dict()
+    root_folder = client.folder("Preservica folder that new assets were ingested into")
     asset_count = 0
     file_count = 0
+    print('----MAKING DROID DICTIONARY---')
+    with open('csv file output from Droid containing manifest of all files', newline = '') as csvfile:
+        reader = csv.reader(csvfile, delimiter = ',', quotechar = '"')
+        for row in reader: 
+            if 'File' in row[8]:
+                droiddict[row[4]] = row[12]
+    print('---MAKING PRESERVICA DICTIONARY----')
     for asset in filter(only_assets, client.all_descendants(root_folder.reference)):
-        asset_count += 1
+        # asset_count += 1
         for representation in client.representations(asset):
             for content_object in client.content_objects(representation):
                 for generation in client.generations(content_object):
                     for bitstream in generation.bitstreams:
-                        file_count += 1
-                        print(bitstream.filename)
-    print('TOTAL ASSETS: {} | TOTAL FILES: {}'.format(asset_count, file_count))
+                        filename = bitstream.filename 
+                        for algorithm,value in bitstream.fixity.items():
+                            hash = value
+                            preservicadict[filename] = hash    
+    print('----COMPARING DICTIONARIES----')            
+    diff = DeepDiff(preservicadict_nojpg, droiddict, verbose_level=2)
+    print(diff)
 # quality_control()
