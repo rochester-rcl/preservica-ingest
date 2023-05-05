@@ -540,6 +540,6 @@ def quality_control():
                             hash = value
                             preservicadict[filename] = hash    
     print('----COMPARING DICTIONARIES----')            
-    diff = DeepDiff(preservicadict_nojpg, droiddict, verbose_level=2)
+    diff = DeepDiff(preservicadict, droiddict, verbose_level=2)
     print(diff)
 # quality_control()
