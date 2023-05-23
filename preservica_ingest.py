@@ -15,8 +15,6 @@ from cleanup_dates import *
 from openpyxl import load_workbook
 from deepdiff import DeepDiff
 
-client = EntityAPI()
-
 # Project Log File variables by index
 # 0 - date_time
 # 1 - container
