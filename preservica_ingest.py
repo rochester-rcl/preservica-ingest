@@ -353,6 +353,7 @@ def write_opex_container_md():
 #to the "pending link" folder to prepare for ArchivesSpace synchronization
 def move_opex_aspace():
     print('----MOVING ASSETS TO PENDING LINK----')
+    client = EntityAPI()
     opex_folder = client.descendants('db77b64a-64e8-4da2-9645-6f3fe92c3164')
     aspace_folder = client.folder('9370a695-6bd3-441c-8498-982538ee8718')
     count = 0
@@ -368,6 +369,7 @@ def move_opex_aspace():
 #folder in "Pending Deletion" to make deletion of the empty folders easier
 def move_aspace_trash():
     print('----MOVING EMPTY FOLDERS TO TRASH----')
+    client = EntityAPI()
     aspace_folder = client.descendants('9370a695-6bd3-441c-8498-982538ee8718')
     count = 0
     now = datetime.now()
@@ -388,6 +390,7 @@ def move_aspace_trash():
 #pipe deliminited identifier list and adds it to the asset as an external identifier
 def dps_identifier():
     print('----ADDING DPS IDENTIFIERS----')
+    client = EntityAPI()
     count = 0
     id_hand = open(os.path.join(proj_path, 'txt file containing ASpace ref|archival_object_number|title|date|cuid'), 'r')
     id_list = id_hand.readlines()
@@ -407,6 +410,7 @@ def dps_identifier():
 #into the PREMIS generator CSV file
 def ref_pull():
     print('----OUTPUTTING ALL THE ASSET REFS TO TERMINAL----')
+    client = EntityAPI()
     folder = client.folder("Preservica folder that new assets were ingested into")
     for asset in filter(only_assets, client.all_descendants(folder.reference)):
         print(asset.reference)
@@ -415,9 +419,8 @@ def ref_pull():
 #this function generates PREMIS records for digital assets based on a CSV file
 def premis_generator():
     print('----CREATING PREMIS RECORDS----')
-    premis_folder = os.path.join(proj_path, 'premis')
-    # os.mkdir(premis_folder)
-    fhand = open('csv file that contains PREMIS information to go into template', 'r')
+    client = EntityAPI()
+    fhand = open('premis.csv', 'r')
     csv_reader = csv.reader(fhand, delimiter=',')
     count = 0
     for row in csv_reader:
@@ -487,48 +490,36 @@ def premis_generator():
             </premis:linkingObjectIdentifier>
         </premis:event>
     </premis:premis>'''.format(preservica_uuid=preservica_uuid, rights_uuid=rights_uuid, rights_basis=rights_basis, rights_status=rights_status, rights_jurisdiction=rights_jurisdiction, rights_date=rights_date, rights_note=rights_note, rights_doc_text=rights_doc_text, rights_doc_uri=rights_doc_uri, event_1_uuid=event_1_uuid, event_1_type=event_1_type, event_1_datetime=event_1_datetime, event_1_details=event_1_details, event_1_agent=event_1_agent)
-        premis_path = os.path.join(proj_path, 'premis', preservica_uuid + '.xml')
+        premis_path = os.path.join(proj_path, preservica_uuid + '.xml')
         with open(premis_path, 'w') as premis_hand:
             premis_hand.write(premis)
-        print('created {}'.format(premis_path))
-    fhand.close()
-    print('created {} PREMIS files'.format(count))
-# premis_generator()
-
-#this function attaches the PREMIS records created in the previous function
-#to their corresponding digital assets in Preservica
-#NOTE MAKE SURE THAT THE NUMBER OF LINES IN CSV MATCHES NUMBER OF ASSETS BEING INGESTED!!!!!!!!
-def premis_attach():
-    print('----ATTACHING PREMIS RECORDS TO ASSETS----')
-    count = 0
-    for file in os.listdir(path='premis'):
-        pres_ref = file.split('.')[0].strip()
-        asset = client.asset(pres_ref)
-        file_path = os.path.join('premis', file)
-        with open(file_path, 'r', encoding="utf-8") as md:
+        asset = client.asset(preservica_uuid)
+        with open(premis_path, 'r', encoding="utf-8") as md:
             asset = client.add_metadata(asset, "http://www.loc.gov/premis/v3", md)
-            print('Appended PREMIS metadata to {}'.format(pres_ref))
-        count += 1
-    print('attached {} PREMIS files'.format(count))
-# premis_attach()
+            print('Appended PREMIS metadata to {}'.format(preservica_uuid))
+        os.remove(premis_path)
+    fhand.close()
+    print('appended {} PREMIS files'.format(count))
+# premis_generator()
 
 #this function generates a dictionary of filename:hash values for both the Droid file manifest
 #and the ingested Preservica assets (using the Preservica API) and then compares the two to
 #ensure they are identical, and provides a report if that is not the case
 def quality_control():
     print('---STARTING QA---')
-    preservicadict = dict()
-    droiddict = dict()
-    root_folder = client.folder("Preservica folder that new assets were ingested into")
     asset_count = 0
     file_count = 0
     print('----MAKING DROID DICTIONARY---')
+    droiddict = dict()
     with open('csv file output from Droid containing manifest of all files', newline = '') as csvfile:
         reader = csv.reader(csvfile, delimiter = ',', quotechar = '"')
         for row in reader: 
             if 'File' in row[8]:
                 droiddict[row[4]] = row[12]
     print('---MAKING PRESERVICA DICTIONARY----')
+    client = EntityAPI()
+    root_folder = client.folder("Preservica folder that new assets were ingested into")
+    preservicadict = dict()
     for asset in filter(only_assets, client.all_descendants(root_folder.reference)):
         # asset_count += 1
         for representation in client.representations(asset):
