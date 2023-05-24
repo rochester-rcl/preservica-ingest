@@ -97,7 +97,7 @@ def folder_ds_files():
         print('created {}'.format(path_folder))
         folder_count += 1
     for file in os.listdir(path = path_container):
-        if os.path.isdir(file) == True:
+        if '.' not in file:
             continue
         else:
             path_file = os.path.join(proj_path, container, file)
