@@ -538,13 +538,14 @@ def quality_control():
 def project_id():
     print('---ADDING PROJECT ID TO INGESTED ASSETS AND FOLDERS----')
     count = 1
+    project_id = 'CHANGE ME project identifier'
     client = EntityAPI()
     folder_ref = 'CHANGE ME root folder added to Preservica'
     folder = client.folder(folder_ref)
+    client.add_identifier(folder, "project_id", project_id)
     for entity in client.all_descendants(folder_ref):
-        client.add_identifier(entity, "project_id", "CHANGE ME project identifier")
+        client.add_identifier(entity, "project_id", project_id)
         count += 1
         print('added id to {}'.format(entity.reference))
-    client.add_identifier(folder, "project_id", "CHANGE ME project identifier")
     print('added identifiers to {} assets and folders'.format(str(count)))
 # project_id()
