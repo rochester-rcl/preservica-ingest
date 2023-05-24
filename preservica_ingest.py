@@ -540,10 +540,9 @@ def project_id():
     count = 1
     project_id = 'CHANGE ME project identifier'
     client = EntityAPI()
-    folder_ref = 'CHANGE ME root folder added to Preservica'
-    folder = client.folder(folder_ref)
+    folder = client.folder('CHANGE ME root folder ref added to Preservica')
     client.add_identifier(folder, "project_id", project_id)
-    for entity in client.all_descendants(folder_ref):
+    for entity in client.all_descendants(folder.reference):
         client.add_identifier(entity, "project_id", project_id)
         count += 1
         print('added id to {}'.format(entity.reference))
