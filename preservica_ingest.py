@@ -282,7 +282,7 @@ def ao_opex_metadata():
     container = vars[1].strip()
     project_log_hand.close()
     file_count = 0
-    id_hand = open(os.path.join(proj_path, 'txt file containing ASpace ref|archival_object_number|title|date|cuid'), 'r')
+    id_hand = open(os.path.join(proj_path, 'CHANGE ME txt file containing ASpace ref|archival_object_number|title|date|cuid'), 'r')
     id_list = id_hand.readlines()
     id_hand.close()
     path_container = os.path.join(proj_path, container)
@@ -390,7 +390,7 @@ def dps_identifier():
     print('----ADDING DPS IDENTIFIERS----')
     client = EntityAPI()
     count = 0
-    id_hand = open(os.path.join(proj_path, 'txt file containing ASpace ref|archival_object_number|title|date|cuid'), 'r')
+    id_hand = open(os.path.join(proj_path, 'CHANGE ME txt file containing ASpace ref|archival_object_number|title|date|cuid'), 'r')
     id_list = id_hand.readlines()
     id_hand.close()
     for line in id_list:
@@ -409,7 +409,7 @@ def dps_identifier():
 def ref_pull():
     print('----OUTPUTTING ALL THE ASSET REFS TO TERMINAL----')
     client = EntityAPI()
-    folder = client.folder("Preservica folder that new assets were ingested into")
+    folder = client.folder("CHANGE ME Preservica folder that new assets were ingested into")
     for asset in filter(only_assets, client.all_descendants(folder.reference)):
         print(asset.reference)
 # ref_pull()
@@ -418,7 +418,7 @@ def ref_pull():
 def premis_generator():
     print('----CREATING PREMIS RECORDS----')
     client = EntityAPI()
-    fhand = open('premis.csv', 'r')
+    fhand = open('CHANGE ME csv file holding PREMIS data', 'r')
     csv_reader = csv.reader(fhand, delimiter=',')
     count = 0
     for row in csv_reader:
@@ -509,14 +509,14 @@ def quality_control():
     file_count = 0
     print('----MAKING DROID DICTIONARY---')
     droiddict = dict()
-    with open('csv file output from Droid containing manifest of all files', newline = '') as csvfile:
+    with open('CHANGE ME csv file output from Droid containing manifest of all files', newline = '') as csvfile:
         reader = csv.reader(csvfile, delimiter = ',', quotechar = '"')
         for row in reader: 
             if 'File' in row[8]:
                 droiddict[row[4]] = row[12]
     print('---MAKING PRESERVICA DICTIONARY----')
     client = EntityAPI()
-    root_folder = client.folder("Preservica folder that new assets were ingested into")
+    root_folder = client.folder("CHANGE ME Preservica folder that new assets were ingested into")
     preservicadict = dict()
     for asset in filter(only_assets, client.all_descendants(root_folder.reference)):
         # asset_count += 1
@@ -532,3 +532,19 @@ def quality_control():
     diff = DeepDiff(preservicadict, droiddict, verbose_level=2)
     print(diff)
 # quality_control()
+
+#this function adds the project identifier to all folders and assets ingested
+#this provides a connection between the documentatoin and the assets
+def project_id():
+    print('---ADDING PROJECT ID TO INGESTED ASSETS AND FOLDERS----')
+    count = 1
+    client = EntityAPI()
+    folder_ref = 'CHANGE ME root folder added to Preservica'
+    folder = client.folder(folder_ref)
+    for entity in client.all_descendants(folder_ref):
+        client.add_identifier(entity, "project_id", "CHANGE ME project identifier")
+        count += 1
+        print('added id to {}'.format(entity.reference))
+    client.add_identifier(folder, "project_id", "CHANGE ME project identifier")
+    print('added identifiers to {} assets and folders'.format(str(count)))
+# project_id()
