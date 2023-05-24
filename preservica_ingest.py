@@ -87,7 +87,9 @@ def folder_ds_files():
     folder_list = list()
     path_container = os.path.join(proj_path, container)
     for file in os.listdir(path = path_container):
-        file_root = file.split('-')[0].strip()
+        file_root = file.split('.')[0].strip()
+        if '-' in file_root:
+            file_root = file_root.split('-')[0].strip()
         if file_root not in folder_list:
             folder_list.append(file_root)
             print('added {} to folder_list'.format(file_root))
@@ -101,19 +103,22 @@ def folder_ds_files():
             continue
         else:
             path_file = os.path.join(proj_path, container, file)
-            file_prefix = file.split('-')[0].strip()
+            file_prefix = file.split('.')[0].strip()
+            if '-' in file_prefix:
+                file_prefix = file_prefix.split('-')[0].strip()
             path_folder = os.path.join(proj_path, container, file_prefix, file)
             shutil.move(path_file, path_folder)
             print('moved {} to {}'.format(path_file, path_folder))
             file_count += 1
     print('created {} folders'.format(folder_count))
-    print('moved {} files'.format(file_count))   
+    print('moved {} files'.format(file_count))     
 # folder_ds_files()            
 
 #this function begins the process of creating the PAX structure necessary for ingest
-#"Representation_Preservation" folder is created, and each image is given a separate subdir inside of it
-def representation_preservation():
-    print('----CREATING REPRESENTATION_PRESERVATION FOLDERS AND MOVING ASSETS INTO THEM----')
+#"Representation_Preservation" folder is created, and each archival image is given a separate subdir inside of it
+#"Representation_Access" folder is created, and each pdf is given a separate subdir inside of it
+def representation_preservation_access():
+    print('----CREATING REPRESENTATION FOLDERS AND MOVING ASSETS INTO THEM----')
     project_log_hand = open(proj_log_file, 'r')
     vars = project_log_hand.readlines()
     project_log_hand.close()
@@ -122,26 +127,36 @@ def representation_preservation():
     file_count = 0
     path_container = os.path.join(proj_path, container)
     rep_pres = 'Representation_Preservation'
+    rep_acc = 'Representation_Access'
     for directory in os.listdir(path = path_container):
         path_directory = os.path.join(proj_path, container, directory)
-        path = os.path.join(proj_path, container, directory, rep_pres)
-        os.mkdir(path)
-        folder_count += 1
+        path_pres = os.path.join(proj_path, container, directory, rep_pres)
+        path_acc = os.path.join(proj_path, container, directory, rep_acc)
+        os.mkdir(path_pres)
+        os.mkdir(path_acc)
+        folder_count += 2
         for file in os.listdir(path = path_directory):
             path_directoryfile = os.path.join(proj_path, container, directory, file)
-            if file == rep_pres:
+            if file == rep_pres or file == rep_acc:
                 continue
+            elif file.endswith('.pdf'):
+                file_name = file.split('.')[0]
+                os.mkdir(os.path.join(path_acc, file_name))
+                print('created directory: {}'.format(path_acc + '/' + file_name))
+                shutil.move(path_directoryfile, os.path.join(path_acc, file_name, file))
+                print('moved file: {}'.format(path_acc + '/' + file_name + '/' + file))
+                file_count += 1
             else:
                 file_name = file.split('.')[0]
-                os.mkdir(os.path.join(path, file_name))
-                print('created directory: {}'.format(path + '/' + file_name))
-                shutil.move(path_directoryfile, os.path.join(path, file_name, file))
-                print('moved file: {}'.format(path + '/' + file_name + '/' + file))
-            file_count += 1
-    print('Created {} Representation_Preservation directories | Moved {} files into created directories'.format(folder_count, file_count))
-# representation_preservation()
+                os.mkdir(os.path.join(path_pres, file_name))
+                print('created directory: {}'.format(path_pres + '/' + file_name))
+                shutil.move(path_directoryfile, os.path.join(path_pres, file_name, file))
+                print('moved file: {}'.format(path_pres + '/' + file_name + '/' + file))
+                file_count += 1
+    print('Created {} Representation directories | Moved {} files into created directories'.format(folder_count, file_count))
+# representation_preservation_access()
 
-#this function stages the "Representation_Preservation" folders for each asset inside a new directory
+#this function stages the "Representation_" folders for each asset inside a new directory
 #this facilitates the creation of the zipped PAX package in the following function
 def stage_pax_content():
     print('----STAGING PAX CONTENT IN PAX_STAGE----')
@@ -158,6 +173,7 @@ def stage_pax_content():
         os.mkdir(path_paxstage)
         pax_count += 1
         shutil.move(os.path.join(path_directory, 'Representation_Preservation'), path_paxstage)
+        shutil.move(os.path.join(path_directory, 'Representation_Access'), path_paxstage)
         rep_count += 1
         print('created /pax_stage in {}'.format(directory))
     print('Created {} pax_stage subdirectories and staged {} representation subdirectories'.format(pax_count, rep_count))
@@ -226,7 +242,7 @@ def pax_metadata():
             pax_read = pax_hand.read()
             sha1_checksum = hashlib.sha1(pax_read).hexdigest()
             pax_hand.close()
-            id_file_hand = open('txt file containing ASpace ref|archival_object_number|title|date|cuid', 'r')
+            id_file_hand = open('CHANGE ME txt file containing ASpace ref|archival_object_number|title|date|cuid', 'r')
             id_file_lines = id_file_hand.readlines()
             id_file_hand.close()
             for line in id_file_lines:
