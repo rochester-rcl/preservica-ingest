@@ -8,7 +8,6 @@ proj_path = proj_path.replace('"', '')
 proj_path = Path(proj_path)
 proj_files = proj_path.rglob('*')
 for entity in proj_files:
-    print(entity)
     if entity.suffix == '.opex':
         continue
     elif 'archival_object_' in entity.name:
@@ -28,6 +27,7 @@ for entity in proj_files:
 </opex:OPEXMetadata>'''.format(ao_num = entity.name)
         with open(entity.joinpath(entity.name + '.opex'), 'w', encoding='utf8') as ao_opex:
             ao_opex.write(opex)
+        print('created: ', entity.name + '.opex')
     elif entity.is_file():
         fhand = open(entity, 'rb')
         fread = fhand.read()
@@ -47,6 +47,7 @@ for entity in proj_files:
 </opex:OPEXMetadata>'''.format(title=entity.stem, checksum=checksum)
         with open(entity.parent.joinpath(entity.name + '.opex'), 'w', encoding='utf8') as file_opex:
             file_opex.write(opex)
+        print('created: ', entity.name + '.opex')
     elif entity.is_dir():
         code = uuid.uuid4()
         file_manifest = ''
@@ -78,3 +79,4 @@ for entity in proj_files:
 </opex:OPEXMetadata>'''.format(title=entity.name, code=code, file_manifest=file_manifest)
         with open(entity.joinpath(entity.name + '.opex'), 'w', encoding='utf8') as folder_opex:
             folder_opex.write(opex)
+        print('created: ', entity.name + '.opex')
