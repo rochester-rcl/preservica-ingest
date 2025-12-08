@@ -355,6 +355,116 @@ def pax_metadata():
     print(f'Created {metadata_count} OPEX metdata files for individual assets')
 # pax_metadata()
 
+#this function loops through ever directory in "container" and opens up the OPEX metadata for the asset storing the entire contents in a string variable
+#then the function loops through a text file that was manually created, containing the call number identifier as well as the ArchivesSpace archival object number
+#while looping through the text file, if a match is found the OPEX metadata string variable, a metadata file is created for the folder
+#this metadata is another facet required for ArchivesSpace to Preservica synchronization
+def ao_opex_metadata():
+    print('----CREATE ARCHIVAL OBJECT OPEX METADATA----')
+    file_count = 0
+    for directory in os.listdir(path = path_container):
+        path_directory = os.path.join(path_container, directory)
+        opex = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<opex:OPEXMetadata xmlns:opex="http://www.openpreservationexchange.org/opex/v1.0">
+<opex:Properties>
+    <opex:Title>{directory}</opex:Title>
+    <opex:Identifiers>
+        <opex:Identifier type="code">{directory}</opex:Identifier>
+    </opex:Identifiers>
+</opex:Properties>
+<opex:DescriptiveMetadata>
+    <LegacyXIP xmlns="http://preservica.com/LegacyXIP">
+        <Virtual>false</Virtual>
+    </LegacyXIP>
+</opex:DescriptiveMetadata>
+</opex:OPEXMetadata>'''
+        ao_md_hand = open(os.path.join(path_directory, directory + '.opex'), 'w')
+        ao_md_hand.write(opex)
+        ao_md_hand.close()
+        file_count += 1
+        print(f'({file_count}) created metadata for {directory}')
+    print(f'Created {file_count} archival object metadata files')
+# ao_opex_metadata()
+
+# this function is for Preservica ingests of born digital files where the file is the entire Preservica asset
+# this function will look for evidence that ArchivesSpace sync is happening and adjust to create metadata to
+# conform with that need.
+def born_digital_opex():
+    proj_path = Path(path_container)
+    proj_files = proj_path.rglob('*')
+    for entity in proj_files:
+        if entity.suffix == '.opex':
+            continue
+        elif 'archival_object_' in entity.name:
+            opex = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <opex:OPEXMetadata xmlns:opex="http://www.openpreservationexchange.org/opex/v1.0">
+        <opex:Properties>
+            <opex:Title>{entity.name}</opex:Title>
+            <opex:Identifiers>
+                <opex:Identifier type="code">{entity.name}</opex:Identifier>
+            </opex:Identifiers>
+        </opex:Properties>
+        <opex:DescriptiveMetadata>
+            <LegacyXIP xmlns="http://preservica.com/LegacyXIP">
+                <Virtual>false</Virtual>
+            </LegacyXIP>
+        </opex:DescriptiveMetadata>
+    </opex:OPEXMetadata>'''
+            with open(entity.joinpath(entity.name + '.opex'), 'w', encoding='utf8') as ao_opex:
+                ao_opex.write(opex)
+            print('created: ', entity.name + '.opex')
+        elif entity.is_file():
+            fhand = open(entity, 'rb')
+            fread = fhand.read()
+            checksum = hashlib.sha1(fread).hexdigest()
+            fhand.close()
+            opex = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <opex:OPEXMetadata xmlns:opex="http://www.openpreservationexchange.org/opex/v1.0">
+        <opex:Properties>
+            <opex:Title>{entity.stem}</opex:Title>
+            <SecurityDescriptor>public</SecurityDescriptor> 
+        </opex:Properties>
+        <opex:Transfer>
+            <opex:Fixities>
+                <opex:Fixity type="SHA-1" value="{checksum}"/>
+            </opex:Fixities>
+        </opex:Transfer>
+    </opex:OPEXMetadata>'''
+            with open(entity.parent.joinpath(entity.name + '.opex'), 'w', encoding='utf8') as file_opex:
+                file_opex.write(opex)
+            print('created: ', entity.name + '.opex')
+        elif entity.is_dir():
+            code = uuid.uuid4()
+            file_manifest = ''
+            desc_md = ''
+            if 'archival_object_' in entity.parent.name:
+                desc_md = '\n\t<opex:DescriptiveMetadata>\n\t\t<LegacyXIP xmlns="http://preservica.com/LegacyXIP">\n\t\t\t<AccessionRef>catalogue</AccessionRef>\n\t\t</LegacyXIP>\n\t</opex:DescriptiveMetadata>\n'
+            for file in entity.glob('*'):
+                file_size = file.stat().st_size
+                file_name = file.name
+                if file.suffix == '.opex':
+                    continue
+                else:
+                    file_manifest += f'\t\t\t<opex:File type="content" size="{file_size}">{file_name}</opex:File>\n'
+            opex = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <opex:OPEXMetadata xmlns:opex="http://www.openpreservationexchange.org/opex/v1.0">
+        <opex:Properties>
+            <opex:Title>{entity.name}</opex:Title>
+            <opex:Identifiers>
+                <opex:Identifier type="code">{code}</opex:Identifier>
+            </opex:Identifiers>
+            <SecurityDescriptor>public</SecurityDescriptor> 
+        </opex:Properties>
+        <opex:Transfer>
+            <opex:Files>
+    {file_manifest}\t\t</opex:Files>
+        </opex:Transfer>{desc_md}
+    </opex:OPEXMetadata>'''
+            with open(entity.joinpath(entity.name + '.opex'), 'w', encoding='utf8') as folder_opex:
+                folder_opex.write(opex)
+            print('created: ', entity.name + '.opex')
+# born_digital_opex()
+
 #-------------------------------------------------------------------------------------------------------------------------------------
 # PREPARING FOR INGEST
 #-------------------------------------------------------------------------------------------------------------------------------------
@@ -713,3 +823,4 @@ def report_assets():
     print('files:', files)
     print('size:', size)
 # annual_report_assets()
+
