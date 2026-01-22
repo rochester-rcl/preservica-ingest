@@ -12,9 +12,9 @@ tiff_path = Path(r"C:\sameple\path\to\tiff\files")
 pdf_path = Path(r'C:\sample\path\to\pdf\files')
 # TODO Right click on CSV file containing metadata, 'Copy as path' and paste it here
 md_path = Path(r"C:\sample\path\to\metadata\spreadsheet.csv")
-# Lines 16-17 create the 'opex' folder than all zipped PAX objects and OPEX metadata will be deposited into
+# TODO Lines 16-17 identify the 'opex' folder than all zipped PAX objects and OPEX metadata will be deposited into
 upload_path = Path(r'C:\location\of\opex\folder')
-upload_path.mkdir()
+
 # Lines 19-24 look for Thumbs.db, desktop.ini, and .DS_Store files and deletes them for you
 for thumbs in tiff_path.rglob('Thumbs.db'):
     thumbs.unlink()
@@ -45,9 +45,9 @@ for asset in asset_dirs:
     rep_acc_path.mkdir()
 # Lines 47-50 we search the PDF directory that we defined on line 12 for a PDF that has the same name as the folder we are in, then we create a single new subdirectory for it inside "Representation_Access", then we *copy* (not move) that PDF into the new file specific subdirectory. This merges the PDF from it's home into the TIFF directory
     for pdf in pdf_path.rglob(asset.name + '.pdf'):
-        pdfdir_path = rep_acc_path.join(pdf.stem)
+        pdfdir_path = rep_acc_path.joinpath(pdf.stem)
         pdfdir_path.mkdir()
-        shutil.copy2(pdf, pdfdir_path.joinpath(pdf.stem))
+        shutil.copy2(pdf, pdfdir_path.joinpath(pdf.name))
 # Lines 52-57 take the contents of our asset folder, which contains both "Representation" subdirectories which contain 1 PDF and many TIFFs and puts them into a new zip file within our "opex" folder - the zip file is named the same as our asset folder with a file extension of ".pax.zip" at the end. We now have our zipped PAX objects
     pax_path = upload_path.joinpath(asset.name + '.pax.zip')
     pax_obj = ZipFile(pax_path, 'w')
@@ -127,4 +127,5 @@ for pax_obj in upload_path.glob('*'):
 end_time = time.time()
 time_total = round((end_time - start_time) / 60)
 print(f'Total Processing Time: {time_total} mins')
+
 
