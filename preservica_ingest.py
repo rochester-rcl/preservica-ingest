@@ -360,13 +360,12 @@ def pax_metadata():
     metadata_count = 0
     for folder in os.listdir(path = path_container):
         metadata_count += 1
-        path_container = os.path.join(path_container, folder)
+        path_folder = os.path.join(path_container, folder)
         desc_md = ''
         title = ''
-        isl_pid = ''
         sha1_checksum = ''
-        for file in os.listdir(path = os.path.join(path_container, folder)):
-            path_file = os.path.join(path_container, file)
+        for file in os.listdir(path = path_folder):
+            path_file = os.path.join(path_folder, file)
             if file.endswith('.zip'):
                 pax_hand = open(path_file, 'rb')
                 pax_read = pax_hand.read()
@@ -398,12 +397,12 @@ def pax_metadata():
         </opex:DescriptiveMetadata>
     </opex:OPEXMetadata>'''
             opex = opex.replace(' & ', ' and ')
-            pax_md_hand = open(os.path.join(path_container, folder, folder + '.pax.zip.opex'), 'w', encoding='utf8')
+            pax_md_hand = open(os.path.join(path_folder, folder + '.pax.zip.opex'), 'w', encoding='utf8')
             pax_md_hand.write(opex)
             pax_md_hand.close()
         print(f'{metadata_count}: created {folder}.pax.zip.opex')
     print(f'Created {metadata_count} OPEX metdata files for individual assets')
-# pax_metadata()
+pax_metadata()
 
 #this function loops through ever directory in "container" and opens up the OPEX metadata for the asset storing the entire contents in a string variable
 #then the function loops through a text file that was manually created, containing the call number identifier as well as the ArchivesSpace archival object number
@@ -873,6 +872,7 @@ def report_assets():
     print('files:', files)
     print('size:', size)
 # annual_report_assets()
+
 
 
 
