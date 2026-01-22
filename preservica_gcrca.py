@@ -72,8 +72,8 @@ for pax_obj in upload_path.glob('*'):
         for row in csv_reader:
             if row[0] == title:
 # Lines 75-104 are all pretty identical, for a given column of the spreadsheet, first we check to see if the cell is empty or not, and if it contains data, then we add a line to the running Dublin Core record started on line 68 with the relevant field, then on line 105 we add the closing tag for the Dublin Core record and now our descriptive metadata is done
-                if row[14] != '':
-                    dublin_core += f'\n\t\t\t<dc:title>{row[14]}</dc:title>'
+                if row[15] != '':
+                    dublin_core += f'\n\t\t\t<dc:title>{row[15]}</dc:title>'
                 if row[10] != '':
                     dublin_core += f'\n\t\t\t<dc:title>{row[10]}</dc:title>'
                 if row[3] != '':
@@ -127,3 +127,4 @@ for pax_obj in upload_path.glob('*'):
 end_time = time.time()
 time_total = round((end_time - start_time) / 60)
 print(f'Total Processing Time: {time_total} mins')
+
