@@ -185,6 +185,55 @@ def cleanup_droid_metsxml():
 # CREATING THE PAX OBJECT
 #-------------------------------------------------------------------------------------------------------------------------------------
 
+# this function begins the process of creating the PAX structure necessary for ingest
+# "Representation_Preservation"  and "Representation_Access" folders are created, 
+# and each image is given a separate subdir inside of it
+def representation_preservation_access():
+    print('---SORTING ASSETS INTO REPRESENTATION FOLDERS---')
+    count = 0
+    for directory in os.listdir(path = path_container):
+        path_directory = os.path.join(proj_path, container, directory)
+        count += 1
+        rep_acc = 'Representation_Access'
+        path_repacc = os.path.join(proj_path, container, directory, rep_acc)
+        os.mkdir(path_repacc)
+        rep_pres = 'Representation_Preservation'
+        path_reppres = os.path.join(proj_path, container, directory, rep_pres)
+        os.mkdir(path_reppres)
+        tiff_count = 0
+        for file in os.listdir(path = path_directory):
+            path_file = os.path.join(proj_path, container, directory, file)
+            if file.endswith('.tif') or file.endswith('.tiff'):
+                tiff_count += 1
+                os.mkdir(os.path.join(path_reppres, directory))
+                shutil.move(path_file, os.path.join(path_reppres, directory, file))
+            if file.endswith('.pdf'):
+                os.mkdir(os.path.join(path_repacc, directory))
+                shutil.move(path_file, os.path.join(path_repacc, directory, file))
+        print(f'{count} - {directory}')
+    print(f'created Representation folders in {count} directories')
+# representation_preservation_access()
+
+#this function stages the "Representation_Access" and "Representation_Preservation" folders for each asset inside a new directory
+#this facilitates the creation of the zipped PAX package in the following function
+def stage_pax_content():
+    print('----STAGING PAX CONTENT IN PAX_STAGE----')
+    pax_count = 0
+    rep_count = 0
+    path_container = os.path.join(proj_path, container)
+    for directory in os.listdir(path = path_container):
+        path_directory = os.path.join(proj_path, container, directory)
+        path_paxstage = os.path.join(proj_path, container, directory, 'pax_stage')
+        os.mkdir(path_paxstage)
+        pax_count += 1
+        shutil.move(os.path.join(path_directory, 'Representation_Access'), path_paxstage)
+        shutil.move(os.path.join(path_directory, 'Representation_Preservation'), path_paxstage)
+        rep_count += 2
+        print(f'{pax_count}: created /pax_stage in {directory}')
+    print(f'Created {pax_count} pax_stage subdirectories and staged {rep_count} representation subdirectories')
+# stage_pax_content()
+
+#these two functions represent a variant of the above two functions
 #this function begins the process of creating the PAX structure necessary for ingest
 #"Representation_Preservation" folder is created, and each image is given a separate subdir inside of it
 def representation_preservation_access():
@@ -823,4 +872,5 @@ def report_assets():
     print('files:', files)
     print('size:', size)
 # annual_report_assets()
+
 
