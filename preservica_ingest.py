@@ -192,24 +192,25 @@ def representation_preservation_access():
     print('---SORTING ASSETS INTO REPRESENTATION FOLDERS---')
     count = 0
     for directory in os.listdir(path = path_container):
-        path_directory = os.path.join(proj_path, container, directory)
+        path_directory = os.path.join(path_container, directory)
         count += 1
         rep_acc = 'Representation_Access'
-        path_repacc = os.path.join(proj_path, container, directory, rep_acc)
+        path_repacc = os.path.join(path_directory, rep_acc)
         os.mkdir(path_repacc)
         rep_pres = 'Representation_Preservation'
-        path_reppres = os.path.join(proj_path, container, directory, rep_pres)
+        path_reppres = os.path.join(path_directory, rep_pres)
         os.mkdir(path_reppres)
         tiff_count = 0
         for file in os.listdir(path = path_directory):
-            path_file = os.path.join(proj_path, container, directory, file)
+            path_file = os.path.join(path_directory, file)
+            file_name = file.split('.')[0]
             if file.endswith('.tif') or file.endswith('.tiff'):
                 tiff_count += 1
-                os.mkdir(os.path.join(path_reppres, directory))
-                shutil.move(path_file, os.path.join(path_reppres, directory, file))
+                os.mkdir(os.path.join(path_reppres, file_name))
+                shutil.move(path_file, os.path.join(path_reppres, file_name, file))
             if file.endswith('.pdf'):
-                os.mkdir(os.path.join(path_repacc, directory))
-                shutil.move(path_file, os.path.join(path_repacc, directory, file))
+                os.mkdir(os.path.join(path_repacc, file_name))
+                shutil.move(path_file, os.path.join(path_repacc, file_name, file))
         print(f'{count} - {directory}')
     print(f'created Representation folders in {count} directories')
 # representation_preservation_access()
@@ -872,5 +873,6 @@ def report_assets():
     print('files:', files)
     print('size:', size)
 # annual_report_assets()
+
 
 
