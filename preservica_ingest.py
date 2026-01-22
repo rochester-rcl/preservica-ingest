@@ -1,878 +1,129 @@
-import os
-import re
 import csv
-import uuid
-import string
+import time
 import shutil
 import hashlib
-import img2pdf
 from pathlib import Path
-from datetime import datetime
 from zipfile import ZipFile
-from deepdiff import DeepDiff
-from pyPreservica import *
 
-#nonstandard packages:
-# - img2pdf
-# - deepdiff
-# - pyPreservica
-
-#-------------------------------------------------------------------------------------------------------------------------------------
-# PROJECT PREPARATION
-#-------------------------------------------------------------------------------------------------------------------------------------
-
-proj_id = 'DPS###_YYYY-MM_SHORTNAME'
-#the project path contains the code, documentation, and files that will be used to create PAX objects for ingest into Preservica 
-proj_path = os.path.join('G:/', proj_id)
-
-#this function creates a staging folder subdirectory within the project folder in which all the files being packaged are placed
-def create_container():
-    now = datetime.now()
-    date_time = now.strftime('%Y-%m-%d_%H-%M-%S')
-    container = 'container_' + date_time
-    os.mkdir(os.path.join(proj_path, container))
-    print(f'Container directory: {container}')
-# create_container()
-
-container = 'container_YYYY-MM-DD_HH-MM-SS'
-path_container = os.path.join(proj_path, container)
-
-#This function renames all of the files in a project's container folder based on the DPS naming conventions. 
-def rename_files():
-    for dirs in os.listdir(path_container):
-        for subdirs in os.listdir(os.path.join(path_container, dirs)):
-            xml_count = 0
-            tiff_count = 0
-            txt_count = 0
-            for files in os.listdir(os.path.join(path_container, dirs, subdirs)):
-                if files.endswith('.pdf'):
-                    new_filename = subdirs + '.pdf'
-                    os.rename(os.path.join(path_container, dirs, subdirs, files), os.path.join(path_container, dirs, subdirs, new_filename))
-                    print('renamed {} to {}'.format(files, new_filename))
-                elif files.endswith('.mets.xml'):
-                    new_filename = subdirs + '.xml'
-                    os.rename(os.path.join(path_container, dirs, subdirs, files), os.path.join(path_container, dirs, subdirs, new_filename))
-                    print('renamed {} to {}'.format(files, new_filename))
-                elif files.endswith('.xml'):
-                    xml_count += 1
-                    xml_num = str(xml_count).zfill(5)
-                    new_filename = subdirs + '_' + xml_num + '.xml'
-                    os.rename(os.path.join(path_container, dirs, subdirs, files), os.path.join(path_container, dirs, subdirs, new_filename))
-                    print('renamed {} to {}'.format(files,new_filename))
-                elif files.endswith('.tif'):
-                    tiff_count += 1
-                    tiff_num = str(tiff_count).zfill(5)
-                    new_filename = subdirs + '_' + tiff_num + '.tif'
-                    os.rename(os.path.join(path_container, dirs, subdirs, files), os.path.join(path_container, dirs, subdirs, new_filename))
-                    print('renamed {} to {}'.format(files,new_filename))
-                elif files.endswith('.txt'):
-                    txt_count += 1
-                    txt_num = str(txt_count).zfill(5)
-                    new_filename = subdirs + '_' + txt_num + '.txt'
-                    os.rename(os.path.join(path_container, dirs, subdirs, files), os.path.join(path_container, dirs, subdirs, new_filename))
-                    print('renamed {} to {}'.format(files,new_filename))
-# rename_files()
-
-# this function creates uses the filenames to create a folder that will ultimately become an asset in Preservica, this is dependent
-# on file naming conventions and assumes that all files associated with a given asset will have identical strings at the start of the file
-def folder_datastreams():
-    print('---SORTING ASSETS ASSET FOLDERS---')
-    id_list = list()
-    for file in os.listdir(path = path_container):
-        file_id = file.split('.')[0]
-        if '-' in id:
-            file_id = file_id.split('-')[0]
-        if file_id not in id_list:
-            id_list.append(file_id)
-    for id in id_list:
-        os.mkdir(os.path.join(path_container, id))
-    for file in os.listdir(path = path_container):
-        if os.path.isdir(os.path.join(path_container, file)) == True:
-            continue
-        else:
-            file_root = file.split('.')[0]
-            if '-' in file_root:
-                file_root = file_root.split('-')[0]
-            shutil.move(os.path.join(path_container, file), os.path.join(path_container, file_root, file))
-            print(f'moved: {file}')
-# folder_datastreams()
-
-#should you need to create PDFs for complex digital objects based on digital still images in Preservica, this is a very simple Python script to take care of that using the img2pdf library
-def img_to_pdf():
-    print('---CREATING PDFS FOR ASSETS---')
-    for folder in os.listdir(path = path_container):
-        imgs = list()
-        for file in os.listdir(path = os.path.join(path_container, folder)):
-            file_path = os.path.join(path_container, folder, file)
-            if '.jpg' in file_path:
-                imgs.append(file_path)
-        with open(os.path.join(path_container, folder, folder + '.pdf'), 'wb') as pdf_convert:
-            pdf_convert.write(img2pdf.convert(imgs))
-        print(f'created PDF for {folder}')
-# img_to_pdf()
-
-#TODO RUN DROID REPORT
-# we run a Droid report to provide a local file manifest and generate checksums at the point of origin - a quality assurance script
-# later will compare the contents of the Droid report with what is in Preservica to ensure nothing was corrupted in transit
-
-#we use Dublin Core Qualified/Dublin Core Terms for all item level metadata for assets and that first gets generated in spreadsheets,
-#this script first loops through each asset directory and matches it up to an identifier column in the spreadsheet, then converts the
-#tabular data into XML and drops the file in the folder
-def dcq_md():
-    print('---CONVERTING METADATA SPREADSHEET TO XML---')
-    for asset_dir in os.listdir(path = path_container):
-        asset_path = os.path.join(path_container, asset_dir)
-        with open(os.path.join(proj_path, proj_id + '_DCQ.csv'), 'r', newline='', encoding='utf8') as dcq_md:
-            csv_reader = csv.reader(dcq_md, delimiter=',', quotechar='"')
-            headers = next(csv_reader)
-            for record in csv_reader:
-                identifier = record[0]
-                if asset_dir == identifier:
-                    xml_record = '<dcterms:dcterms xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" targetNamespace="http://purl.org/dc/terms/" xmlns="http://purl.org/dc/terms/" elementFormDefault="qualified" attributeFormDefault="unqualified">\n'
-                    pos = 0
-                    for field in record:
-                        values = field.split('|')
-                        for value in values:
-                            xml_str = '\t<' + headers[pos] + '>' + value.strip() + '</' + headers[pos].split()[0] + '>\n'
-                            if xml_str == '\t<' + headers[pos] + '></' + headers[pos].split()[0] + '>\n':
-                                continue
-                            if xml_str == '\t<' + headers[pos] + '>' + string.whitespace + '</' + headers[pos].split()[0] + '>\n':
-                                continue
-                            else:
-                                xml_record += xml_str
-                        pos += 1
-                    xml_record += '</dcterms:dcterms>'
-                    xml_hand = open(os.path.join(asset_path, asset_dir + '_MD.xml'), 'w', encoding='utf8')
-                    xml_hand.write(xml_record)
-                    xml_hand.close()
-                    print(f'created metadata for {identifier}')
-# dcq_md()
-
-#This function renames and folders .srt caption files in order to conform with Preservica's file requirements for rendering captions. 
-def folder_captions():
-    print('---foldering captions---')
-    for folder in os.listdir(path_container):
-        os.mkdir(os.path.join(path_container, folder, 'English'))
-        for files in os.listdir(os.path.join(path_container, folder)):
-            if files.endswith('.srt'):
-                os.rename(os.path.join(path_container, folder, files), os.path.join(path_container, folder, 'Video.srt'))
-                shutil.move(os.path.join(path_container, folder, 'Video.srt'), os.path.join(path_container, folder, 'English'))
-# folder_captions()
-
-# This function should ONLY be used if the assets being ingested include .mets.xml files as metadata files in order to distinguish them from other
-# .xml files that are part of the ingested asset. This can also be modified to strip out any other unneeded elements from the Droid file
-# This function strips out the metadata file lines from the Droid report as they are not needed and won't be ingested as files into Preservica
-
-def cleanup_droid_metsxml():
-    print('----CLEANING UP DROID FILE----')
-    droid_hand_read = open(proj_id + '_droid.csv', 'r', encoding='utf8', newline='')
-    csv_reader = csv.reader(droid_hand_read, delimiter=',', quotechar='"')
-    new_droid = list()
-    for line in csv_reader:
-        if '.mets.xml' in str(line):
-            continue
-        else:
-            new_droid.append(line)
-    droid_hand_read.close()
-    droid_hand_read = open(proj_id + '_droid.csv', 'w', encoding='utf8', newline='')
-    csv_writer = csv.writer(droid_hand_read, delimiter=',', quotechar='"')
-    csv_writer.writerows(new_droid)
-    droid_hand_read.close()
-    print('Droid file cleaned up!')
-# cleanup_droid_metsxml()
-
-#-------------------------------------------------------------------------------------------------------------------------------------
-# CREATING THE PAX OBJECT
-#-------------------------------------------------------------------------------------------------------------------------------------
-
-# this function begins the process of creating the PAX structure necessary for ingest
-# "Representation_Preservation"  and "Representation_Access" folders are created, 
-# and each image is given a separate subdir inside of it
-def representation_preservation_access():
-    print('---SORTING ASSETS INTO REPRESENTATION FOLDERS---')
-    count = 0
-    for directory in os.listdir(path = path_container):
-        path_directory = os.path.join(path_container, directory)
-        count += 1
-        rep_acc = 'Representation_Access'
-        path_repacc = os.path.join(path_directory, rep_acc)
-        os.mkdir(path_repacc)
-        rep_pres = 'Representation_Preservation'
-        path_reppres = os.path.join(path_directory, rep_pres)
-        os.mkdir(path_reppres)
-        tiff_count = 0
-        for file in os.listdir(path = path_directory):
-            path_file = os.path.join(path_directory, file)
-            file_name = file.split('.')[0]
-            if file.endswith('.tif') or file.endswith('.tiff'):
-                tiff_count += 1
-                os.mkdir(os.path.join(path_reppres, file_name))
-                shutil.move(path_file, os.path.join(path_reppres, file_name, file))
-            if file.endswith('.pdf'):
-                os.mkdir(os.path.join(path_repacc, file_name))
-                shutil.move(path_file, os.path.join(path_repacc, file_name, file))
-        print(f'{count} - {directory}')
-    print(f'created Representation folders in {count} directories')
-# representation_preservation_access()
-
-#this function stages the "Representation_Access" and "Representation_Preservation" folders for each asset inside a new directory
-#this facilitates the creation of the zipped PAX package in the following function
-def stage_pax_content():
-    print('----STAGING PAX CONTENT IN PAX_STAGE----')
-    pax_count = 0
-    rep_count = 0
-    path_container = os.path.join(proj_path, container)
-    for directory in os.listdir(path = path_container):
-        path_directory = os.path.join(proj_path, container, directory)
-        path_paxstage = os.path.join(proj_path, container, directory, 'pax_stage')
-        os.mkdir(path_paxstage)
-        pax_count += 1
-        shutil.move(os.path.join(path_directory, 'Representation_Access'), path_paxstage)
-        shutil.move(os.path.join(path_directory, 'Representation_Preservation'), path_paxstage)
-        rep_count += 2
-        print(f'{pax_count}: created /pax_stage in {directory}')
-    print(f'Created {pax_count} pax_stage subdirectories and staged {rep_count} representation subdirectories')
-# stage_pax_content()
-
-#these two functions represent a variant of the above two functions
-#this function begins the process of creating the PAX structure necessary for ingest
-#"Representation_Preservation" folder is created, and each image is given a separate subdir inside of it
-def representation_preservation_access():
-    print('---SORTING ASSETS INTO REPRESENTATION FOLDERS---')
-    count = 0
-    for directory in os.listdir(path = path_container):
-        path_directory = os.path.join(proj_path, container, directory)
-        ascii_doc = directory + '_transcript.asc'
-        file_list = os.listdir(path = path_directory)
-        if ascii_doc in file_list:
-            count += 1
-            rep_acc_1 = 'Representation_Access_1'
-            rep_acc_2 = 'Representation_Access_2'
-            path_repacc_1 = os.path.join(proj_path, container, directory, rep_acc_1)
-            path_repacc_2 = os.path.join(proj_path, container, directory, rep_acc_2)
-            os.mkdir(path_repacc_1)
-            os.mkdir(path_repacc_2)
-            for file in os.listdir(path = path_directory):
-                path_file = os.path.join(proj_path, container, directory, file)
-                if file in (rep_acc_1, rep_acc_2):
-                    continue
-                elif file.endswith('.xml'):
-                    continue
-                elif file.endswith('.asc'):
-                    os.mkdir(os.path.join(path_repacc_1, directory + '_transcript'))
-                    shutil.move(path_file, os.path.join(path_repacc_1, directory + '_transcript', file))
-                elif file.endswith('.pdf'):
-                    os.mkdir(os.path.join(path_repacc_2, directory + '_document'))
-                    shutil.move(path_file, os.path.join(path_repacc_2, directory + '_document', file))
-            print(f'{count}: Representation Access 1 & 2')
-        else:
-            count += 1
-            rep_acc = 'Representation_Access'
-            path_repacc = os.path.join(proj_path, container, directory, rep_acc)
-            os.mkdir(path_repacc)
-            for file in os.listdir(path = path_directory):
-                path_file = os.path.join(proj_path, container, directory, file)
-                if file in (rep_acc):
-                    continue
-                elif file.endswith('.xml'):
-                    continue
-                elif file.endswith('.pdf'):
-                    os.mkdir(os.path.join(path_repacc, directory + '_document'))
-                    shutil.move(path_file, os.path.join(path_repacc, directory + '_document', file))
-            print(f'{count}: Representation Acess')
-    print(f'created Representation folders in {count} directories')
-# representation_preservation_access()
-
-#this function stages the "Representation_Access" and "Representation_Preservation" folders for each asset inside a new directory
-#this facilitates the creation of the zipped PAX package in the following function
-def stage_pax_content():
-    print('----STAGING PAX CONTENT IN PAX_STAGE----')
-    pax_count = 0
-    rep_count = 0
-    path_container = os.path.join(proj_path, container)
-    for directory in os.listdir(path = path_container):
-        path_directory = os.path.join(proj_path, container, directory)
-        folder_list = os.listdir(path = path_directory)
-        path_paxstage = os.path.join(proj_path, container, directory, 'pax_stage')
-        os.mkdir(path_paxstage)
-        if 'Representation_Access_1' in folder_list:
-            pax_count += 1
-            shutil.move(os.path.join(path_directory, 'Representation_Access_1'), path_paxstage)
-            shutil.move(os.path.join(path_directory, 'Representation_Access_2'), path_paxstage)
-            rep_count += 2
-            print(f'{pax_count}: created /pax_stage in {directory}')
-        else:
-            pax_count += 1
-            shutil.move(os.path.join(path_directory, 'Representation_Access'), path_paxstage)
-            rep_count += 1
-            print(f'{pax_count}: created /pax_stage in {directory}')
-    print(f'Created {pax_count} pax_stage subdirectories and staged {rep_count} representation subdirectories')
-# stage_pax_content()
-
-#this is a variant of the the stage_pax_content() function which uses Pathlib and rglob in order to grab all of the
-#Access and Preservation Represenation folders, without having to know the data model for the given PAX object in advance
-def stage_pax_content_pathlib():
-    print('----STAGING PAX CONTENT IN PAX_STAGE----')
-    pax_count = 0
-    rep_count = 0
-    path_container = os.path.join(proj_path, container)
-    for directory in os.listdir(path = path_container):
-        path_directory = os.path.join(proj_path, container, directory) 
-        pathlib_dir = Path(path_directory)
-        rep_dirs = pathlib_dir.glob('Representation_*')
-        path_paxstage = os.path.join(proj_path, container, directory, 'pax_stage')
-        os.mkdir(path_paxstage)
-        pax_count += 1
-        for rep_dir in rep_dirs:
-            shutil.move(rep_dir, path_paxstage)
-            rep_count += 1
-        print(f'{pax_count}: created /pax_stage in {directory}')
-    print(f'Created {pax_count} pax_stage subdirectories and staged {rep_count} representation subdirectories')
-# stage_pax_content_pathlib()
-
-#this function takes the contents of the "pax_stage" folder created in the previous function and writes them into a zip archive
-#the zip archive is the PAX object that will eventually become an Asset in Preservica
-def create_pax():
-    print('----CREATING PAX ZIP ARCHIVES----')
-    dir_count = 0
-    path_container = os.path.join(proj_path, container)
-    for directory in os.listdir(path = path_container):
-        path_zipdir = os.path.join(proj_path, container, directory, 'pax_stage/')
-        path_directory = os.path.join(proj_path, container, directory)
-        zip_dir = Path(path_zipdir)
-        pax_obj = ZipFile(os.path.join(path_directory, directory + '.pax.zip'), 'w')
-        for file_path in zip_dir.rglob("*"):
-            pax_obj.write(file_path, arcname = file_path.relative_to(zip_dir))
-        pax_obj.close()
-        dir_count += 1
-        print(f'{dir_count}: created {directory}.pax.zip')
-    print(f'Created {dir_count} PAX archives for ingest')
-# create_pax()
-
-#-------------------------------------------------------------------------------------------------------------------------------------
-# CREATING THE OPEX METADATA
-#-------------------------------------------------------------------------------------------------------------------------------------
-
-#this function creates the OPEX metadata file that accompanies an individual zipped PAX package
-#this function also includes the metadata necessary for ArchivesSpace sync to Preservica
-def pax_metadata():
-    print('---CREATING METADATA FILES FOR PAX OBJECTS----')
-    metadata_count = 0
-    for folder in os.listdir(path = path_container):
-        metadata_count += 1
-        path_folder = os.path.join(path_container, folder)
-        desc_md = ''
-        title = ''
-        sha1_checksum = ''
-        for file in os.listdir(path = path_folder):
-            path_file = os.path.join(path_folder, file)
-            if file.endswith('.zip'):
-                pax_hand = open(path_file, 'rb')
-                pax_read = pax_hand.read()
-                sha1_checksum = hashlib.sha1(pax_read).hexdigest()
-                pax_hand.close()
-            elif file.endswith('_MD.xml'):
-                dmd_hand = open(path_file, 'r', encoding='utf8')
-                dmd = dmd_hand.read().strip()
-                title = re.findall('<dc:title>(.+?)</dc:title>', dmd)[0]
-                desc_md += dmd + '\n'
-                dmd_hand.close()
-            opex = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-    <opex:OPEXMetadata xmlns:opex="http://www.openpreservationexchange.org/opex/v1.0">
-        <opex:Properties>
-            <opex:Title>{title}</opex:Title>
-            <opex:Identifiers>
-                <opex:Identifier type="dps">{folder}</opex:Identifier>
-                <opex:Identifier type="project_id">{proj_id}</opex:Identifier>
-            </opex:Identifiers>
-            <SecurityDescriptor>public</SecurityDescriptor> 
-        </opex:Properties>
-        <opex:Transfer>
-            <opex:Fixities>
-                <opex:Fixity type="SHA-1" value="{sha1_checksum}"/>
-            </opex:Fixities>
-        </opex:Transfer>
-        <opex:DescriptiveMetadata>
-            {desc_md}
-        </opex:DescriptiveMetadata>
-    </opex:OPEXMetadata>'''
-            opex = opex.replace(' & ', ' and ')
-            pax_md_hand = open(os.path.join(path_folder, folder + '.pax.zip.opex'), 'w', encoding='utf8')
-            pax_md_hand.write(opex)
-            pax_md_hand.close()
-        print(f'{metadata_count}: created {folder}.pax.zip.opex')
-    print(f'Created {metadata_count} OPEX metdata files for individual assets')
-pax_metadata()
-
-#this function loops through ever directory in "container" and opens up the OPEX metadata for the asset storing the entire contents in a string variable
-#then the function loops through a text file that was manually created, containing the call number identifier as well as the ArchivesSpace archival object number
-#while looping through the text file, if a match is found the OPEX metadata string variable, a metadata file is created for the folder
-#this metadata is another facet required for ArchivesSpace to Preservica synchronization
-def ao_opex_metadata():
-    print('----CREATE ARCHIVAL OBJECT OPEX METADATA----')
-    file_count = 0
-    for directory in os.listdir(path = path_container):
-        path_directory = os.path.join(path_container, directory)
-        opex = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+start_time = time.time()
+# TODO Right click on folder containing all TIFF files, 'Copy as path' and paste it here
+tiff_path = Path(r"C:\sameple\path\to\tiff\files")
+# TODO Right click on folder containing all PDF files, 'Copy as path' and paste it here
+pdf_path = Path(r'C:\sample\path\to\pdf\files')
+# TODO Right click on CSV file containing metadata, 'Copy as path' and paste it here
+md_path = Path(r"C:\sample\path\to\metadata\spreadsheet.csv")
+# Lines 16-17 create the 'opex' folder than all zipped PAX objects and OPEX metadata will be deposited into
+upload_path = Path(r'C:\location\of\opex\folder')
+upload_path.mkdir()
+# Lines 19-24 look for Thumbs.db, desktop.ini, and .DS_Store files and deletes them for you
+for thumbs in tiff_path.rglob('Thumbs.db'):
+    thumbs.unlink()
+for desktop in tiff_path.rglob('desktop.ini'):
+    desktop.unlink()
+for dsstore in tiff_path.rglob('*DS_Store'):
+    dsstore.unlink()
+# Lines 26-31 looks through everything in the folder containing the TIFF files, finds each TIFF file, then adds the parent folder to a list if it isn't already in the list
+asset_dirs = list()
+tiff_files = tiff_path.rglob('*.tif*')
+for file in tiff_files:
+    if file.parent not in asset_dirs:
+        asset_dirs.append(file.parent)
+        print(f'added to asset folder list: {file.parent}')
+# Line 33 starts looping through the list of folders that will become assets in Preservica, each of which contains all the TIFFs for the asset
+for asset in asset_dirs:
+# Lines 35-36 we create a new subdirectory called "Representation_Preservation" inside the folder we are currently working on
+    rep_pres_path = asset.joinpath('Representation_Preservation')
+    rep_pres_path.mkdir()
+# Lines 38-42 we find all the TIFF files in the current folder, create a lot of new subdirectories in "Representation_Preservation" that are each named the same as the TIFF file, and then move the corresponding TIFF file into that subdirectory just for the specific file 
+    asset_files = asset.glob('*.tif*')
+    for tiff in asset_files:
+        filedir_path = rep_pres_path.joinpath(tiff.stem)
+        filedir_path.mkdir()
+        shutil.move(tiff, filedir_path.joinpath(tiff.name))
+# Lines 44-45 do something very similar to the above - inside the current TIFF folder we also create a subdirectory called "Representation_Access" for the PDF file
+    rep_acc_path = asset.joinpath('Representation_Access')
+    rep_acc_path.mkdir()
+# Lines 47-50 we search the PDF directory that we defined on line 12 for a PDF that has the same name as the folder we are in, then we create a single new subdirectory for it inside "Representation_Access", then we *copy* (not move) that PDF into the new file specific subdirectory. This merges the PDF from it's home into the TIFF directory
+    for pdf in pdf_path.rglob(asset.name + '.pdf'):
+        pdfdir_path = rep_acc_path.join(pdf.stem)
+        pdfdir_path.mkdir()
+        shutil.copy2(pdf, pdfdir_path.joinpath(pdf.stem))
+# Lines 52-57 take the contents of our asset folder, which contains both "Representation" subdirectories which contain 1 PDF and many TIFFs and puts them into a new zip file within our "opex" folder - the zip file is named the same as our asset folder with a file extension of ".pax.zip" at the end. We now have our zipped PAX objects
+    pax_path = upload_path.joinpath(asset.name + '.pax.zip')
+    pax_obj = ZipFile(pax_path, 'w')
+    for entity in asset.rglob('*'):
+        pax_obj.write(entity, arcname = entity.relative_to(asset))
+    pax_obj.close()
+    print(f'created zipped PAX object: {pax_path}')
+# Line 59 now starts looping through all of the newly created zip files from the previous section - Line 60 pulls the "title" field by grabbing the zip files's file name - Line 61 is whatever security tag you would like to apply to the resource
+for pax_obj in upload_path.glob('*'):
+    title = str(pax_obj.name).split('.')[0]
+    sec_tag = 'public'
+# Lines 63-66 open the zip file, generate a SHA1 checksum for it, store it in a variable, and close the zip file again
+    pax_hand = open(pax_obj, 'rb')
+    pax_read = pax_hand.read()
+    sha1_checksum = hashlib.sha1(pax_read).hexdigest()
+    pax_hand.close()
+# Line 68 starts working on the Dublin Core metadata, creating a string that we will keep adding to which starts with the XML record header
+    dublin_core = '\n\t\t<oai_dc:dc xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/oai_dc/ http://www.openarchives.org/OAI/2.0/oai_dc.xsd" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
+# Lines 70-73 opens up the metadata spreadsheet we identified on line 14, creates a CSV reader to analyze it, and then starts looping through every line in the spreadsheet. Since the first column of the spreadsheet contains the same number that is both the asset folder name, as well as our zipped PAX object name, when we match the "title" we identified on line 60 to a line in the spreadsheet, we know we've found a match and use that line to generate the metadata
+    with open(md_path, 'r', encoding='utf8', newline='') as md:
+        csv_reader = csv.reader(md, quotechar='"', delimiter=',')
+        for row in csv_reader:
+            if row[0] == title:
+# Lines 75-104 are all pretty identical, for a given column of the spreadsheet, first we check to see if the cell is empty or not, and if it contains data, then we add a line to the running Dublin Core record started on line 68 with the relevant field, then on line 105 we add the closing tag for the Dublin Core record and now our descriptive metadata is done
+                if row[14] != '':
+                    dublin_core += f'\n\t\t\t<dc:title>{row[14]}</dc:title>'
+                if row[9] != '':
+                    dublin_core += f'\n\t\t\t<dc:title>{row[10]}</dc:title>'
+                if row[3] != '':
+                    dublin_core += f'\n\t\t\t<dc:creator>{row[3]}</dc:creator>'
+                if row[13] != '':
+                    dublin_core += f'\n\t\t\t<dc:subject>{row[14]}</dc:subject>'
+                if row[5] != '':
+                    dublin_core += f'\n\t\t\t<dc:description>{row[5]}</dc:description>'
+                if row[10] != '':
+                    dublin_core += f'\n\t\t\t<dc:publisher>{row[11]}</dc:publisher>'
+                if row[1] != '':
+                    dublin_core += f'\n\t\t\t<dc:contributor>{row[1]}</dc:contributor>'
+                if row[4] != '':
+                    dublin_core += f'\n\t\t\t<dc:date>{row[4]}</dc:date>'
+                if row[15] != '':
+                    dublin_core += f'\n\t\t\t<dc:type>{row[16]}</dc:type>'
+                if row[6] != '':
+                    dublin_core += f'\n\t\t\t<dc:format>{row[6]}</dc:format>'
+                if row[6] != '':
+                    dublin_core += f'\n\t\t\t<dc:format>{row[7]}</dc:format>'
+                if row[7] != '':
+                    dublin_core += f'\n\t\t\t<dc:identifier>{row[8]}</dc:identifier>'
+                if row[12] != '':
+                    dublin_core += f'\n\t\t\t<dc:source>{row[13]}</dc:source>'
+                if row[8] != '':
+                    dublin_core += f'\n\t\t\t<dc:language>{row[9]}</dc:language>'
+                if row[2] != '':
+                    dublin_core += f'\n\t\t\t<dc:coverage>{row[2]}</dc:coverage>'
+                if row[11] != '':
+                    dublin_core += f'\n\t\t\t<dc:rights>{row[12]}</dc:rights>'
+    dublin_core += '\n\t\t</oai_dc:dc>\n\t'
+# Lines 107-119 are a template for the OPEX metadata that we start plugging values into, including the title, the security tag, the checksum, and the entire Dublin Core record - OPEX metadata can be a wrapper for whole other metadata schemas
+    opex = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <opex:OPEXMetadata xmlns:opex="http://www.openpreservationexchange.org/opex/v1.0">
-<opex:Properties>
-    <opex:Title>{directory}</opex:Title>
-    <opex:Identifiers>
-        <opex:Identifier type="code">{directory}</opex:Identifier>
-    </opex:Identifiers>
-</opex:Properties>
-<opex:DescriptiveMetadata>
-    <LegacyXIP xmlns="http://preservica.com/LegacyXIP">
-        <Virtual>false</Virtual>
-    </LegacyXIP>
-</opex:DescriptiveMetadata>
+    <opex:Properties>
+        <opex:Title>{title}</opex:Title>
+        <SecurityDescriptor>{sec_tag}</SecurityDescriptor> 
+    </opex:Properties>
+    <opex:Transfer>
+        <opex:Fixities>
+            <opex:Fixity type="SHA-1" value="{sha1_checksum}"/>
+        </opex:Fixities>
+    </opex:Transfer>
+    <opex:DescriptiveMetadata>{dublin_core}</opex:DescriptiveMetadata>
 </opex:OPEXMetadata>'''
-        ao_md_hand = open(os.path.join(path_directory, directory + '.opex'), 'w')
-        ao_md_hand.write(opex)
-        ao_md_hand.close()
-        file_count += 1
-        print(f'({file_count}) created metadata for {directory}')
-    print(f'Created {file_count} archival object metadata files')
-# ao_opex_metadata()
-
-# this function is for Preservica ingests of born digital files where the file is the entire Preservica asset
-# this function will look for evidence that ArchivesSpace sync is happening and adjust to create metadata to
-# conform with that need.
-def born_digital_opex():
-    proj_path = Path(path_container)
-    proj_files = proj_path.rglob('*')
-    for entity in proj_files:
-        if entity.suffix == '.opex':
-            continue
-        elif 'archival_object_' in entity.name:
-            opex = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-    <opex:OPEXMetadata xmlns:opex="http://www.openpreservationexchange.org/opex/v1.0">
-        <opex:Properties>
-            <opex:Title>{entity.name}</opex:Title>
-            <opex:Identifiers>
-                <opex:Identifier type="code">{entity.name}</opex:Identifier>
-            </opex:Identifiers>
-        </opex:Properties>
-        <opex:DescriptiveMetadata>
-            <LegacyXIP xmlns="http://preservica.com/LegacyXIP">
-                <Virtual>false</Virtual>
-            </LegacyXIP>
-        </opex:DescriptiveMetadata>
-    </opex:OPEXMetadata>'''
-            with open(entity.joinpath(entity.name + '.opex'), 'w', encoding='utf8') as ao_opex:
-                ao_opex.write(opex)
-            print('created: ', entity.name + '.opex')
-        elif entity.is_file():
-            fhand = open(entity, 'rb')
-            fread = fhand.read()
-            checksum = hashlib.sha1(fread).hexdigest()
-            fhand.close()
-            opex = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-    <opex:OPEXMetadata xmlns:opex="http://www.openpreservationexchange.org/opex/v1.0">
-        <opex:Properties>
-            <opex:Title>{entity.stem}</opex:Title>
-            <SecurityDescriptor>public</SecurityDescriptor> 
-        </opex:Properties>
-        <opex:Transfer>
-            <opex:Fixities>
-                <opex:Fixity type="SHA-1" value="{checksum}"/>
-            </opex:Fixities>
-        </opex:Transfer>
-    </opex:OPEXMetadata>'''
-            with open(entity.parent.joinpath(entity.name + '.opex'), 'w', encoding='utf8') as file_opex:
-                file_opex.write(opex)
-            print('created: ', entity.name + '.opex')
-        elif entity.is_dir():
-            code = uuid.uuid4()
-            file_manifest = ''
-            desc_md = ''
-            if 'archival_object_' in entity.parent.name:
-                desc_md = '\n\t<opex:DescriptiveMetadata>\n\t\t<LegacyXIP xmlns="http://preservica.com/LegacyXIP">\n\t\t\t<AccessionRef>catalogue</AccessionRef>\n\t\t</LegacyXIP>\n\t</opex:DescriptiveMetadata>\n'
-            for file in entity.glob('*'):
-                file_size = file.stat().st_size
-                file_name = file.name
-                if file.suffix == '.opex':
-                    continue
-                else:
-                    file_manifest += f'\t\t\t<opex:File type="content" size="{file_size}">{file_name}</opex:File>\n'
-            opex = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-    <opex:OPEXMetadata xmlns:opex="http://www.openpreservationexchange.org/opex/v1.0">
-        <opex:Properties>
-            <opex:Title>{entity.name}</opex:Title>
-            <opex:Identifiers>
-                <opex:Identifier type="code">{code}</opex:Identifier>
-            </opex:Identifiers>
-            <SecurityDescriptor>public</SecurityDescriptor> 
-        </opex:Properties>
-        <opex:Transfer>
-            <opex:Files>
-    {file_manifest}\t\t</opex:Files>
-        </opex:Transfer>{desc_md}
-    </opex:OPEXMetadata>'''
-            with open(entity.joinpath(entity.name + '.opex'), 'w', encoding='utf8') as folder_opex:
-                folder_opex.write(opex)
-            print('created: ', entity.name + '.opex')
-# born_digital_opex()
-
-#-------------------------------------------------------------------------------------------------------------------------------------
-# PREPARING FOR INGEST
-#-------------------------------------------------------------------------------------------------------------------------------------
-
-#this function deletes many files and folders that have now served their purpose in the migration process
-#all metadata files are deleted as well as the "pax_stage" folder and it's contents
-#a warning is thrown up and directory and file name information written to "project_log.txt" if an unexpected file is discovered
-def cleanup_directories():
-    print('----REMOVING UNNECESSARY FILES----')
-    file_count = 0
-    dir_count = 0
-    unexpected = 0
-    path_container = os.path.join(proj_path, container)
-    for directory in os.listdir(path = path_container):
-        path_directory = os.path.join(proj_path, container, directory)
-        for entity in os.listdir(path = path_directory):
-            path_entity = os.path.join(proj_path, container, directory, entity)
-            if entity.endswith('.zip') == True:
-                print('PAX: ' + entity)
-            elif entity.endswith('.opex') == True:
-                print('metadata: ' + entity)
-            elif entity.endswith('.xml') == True:
-                os.remove(path_entity)
-                file_count += 1
-                print('removed metadata file')
-            elif entity == 'pax_stage':
-                shutil.rmtree(path_entity)
-                dir_count += 1
-                print('removed pax_stage directory')
-            else:
-                print('***UNEXPECTED ENTITY: ' + entity)
-                unexpected += 1
-    print(f'Deleted {file_count} metadata files and {dir_count} Representation_Preservation and Representation_Access folders')
-    print(f'Found {unexpected} unexpected entities')
-# cleanup_directories()
-
-#this script will take assets out of individual folders where they were constructed and stage them directly
-#in the container folder where they can be ingested en masse
-def restage_content():
-    print('---RESTAGING CONTENT---')
-    count = 0
-    for directory in os.listdir(path=path_container):
-        directory_path = os.path.join(path_container, directory)
-        for file in os.listdir(path=directory_path):
-            file_path = os.path.join(path_container, directory, file)
-            shutil.move(file_path, os.path.join(path_container, file))
-        os.rmdir(directory_path)
-        count += 1
-        print(f'{count}: {directory_path}')
-    print(f'restaed {count} directories')
-# restage_content()
-
-#TODO transfer container folder to Preservica bulk bucket
-
-#-------------------------------------------------------------------------------------------------------------------------------------
-# POST INGEST ACTIVITIES
-#-------------------------------------------------------------------------------------------------------------------------------------
-
-#creates a one-column CSV file with all of the Preservica Ref IDs for assets ingested into the system
-#this function defaults to the Ref ID for the OPEX ingest folder and thus should not need to be updated
-#but needs to be run before transfering assets out of the OPEX ingest folder
-def ref_pull():
-    print('----CREATING REF ID CSV----')
-    count = 0
-    ref_csv = open(proj_id + '_refs.csv', 'w', newline='', encoding='utf8')
-    ref_writer = csv.writer(ref_csv, delimiter=',', quotechar='"')
-    client = EntityAPI()
-    opex_folder = client.descendants('db77b64a-64e8-4da2-9645-6f3fe92c3164')
-    for entity in opex_folder:
-        ref_writer.writerow([entity.reference])
-        count += 1
-        print(f'{count}: pulled {entity.reference}')
-    ref_csv.close()
-    print(f'created {proj_id}_refs.csv')
-# ref_pull()
-
-#this function generates PREMIS metadata for details about the assets not captured by system, such as creation date
-#for digitized items, copyright status of materials, and extra details about the ingestion and/or migration of materials
-#and then appends the metadata to the asset within Preservica. This uses the Ref IDs stored in the CSV file generated by
-#the ref_pull() function
-def premis_generator():
-    print('----CREATING PREMIS RECORDS----')
-    client = EntityAPI()
-    fhand = open(proj_id + '_refs.csv', 'r', newline='')
-    csv_reader = csv.reader(fhand, delimiter=',', quotechar='"')
-    count = 0
-    for row in csv_reader:
-        count += 1
-        preservica_uuid = row[0]
-        rights_uuid = uuid.uuid4()
-        rights_basis = 'copyright' #or license, statute, institutional policy, other
-        rights_status = 'copyrighted' #copyrighted, unknown, public domain
-        rights_jurisdiction = 'us'
-        rights_date = '2024-06-29'
-        rights_note = 'Published by the Friends of Mount Hope Cemetery and protected by copyright, which is held by the the organization.'
-        rights_doc_text = 'In Copyright'
-        rights_doc_uri = 'http://rightsstatements.org/vocab/InC/1.0/'
-        event_1_uuid = uuid.uuid4()
-        event_1_type = 'migration'
-        event_1_datetime = '2024-10-02'
-        event_1_details = 'Migrated as part of larger project to move from Islandora 7 repositories to Preservica over the course of 2024.'
-        event_1_agent = 'John Dewees, Senior Digital Asset Management Specialist, Digital Initiatives department, River Campus Libraries, University of Rochester'
-        event_2_uuid = uuid.uuid4()
-        event_2_type = 'creation'
-        event_2_datetime = '2020-2023'
-        event_2_details = 'reformatted digital'
-        event_2_agent = 'Rare Books, Special Collections, and Preservation department, River Campus Libraries, University of Rochester'
-        premis = f'''<premis:premis xmlns:premis="http://www.loc.gov/premis/v3" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.loc.gov/premis/v3 https://www.loc.gov/standards/premis/premis.xsd" version="3.0">
-        <premis:object xsi:type="premis:intellectualEntity">
-            <premis:objectIdentifier>
-                <premis:objectIdentifierType>preservica_uuid</premis:objectIdentifierType>
-                <premis:objectIdentifierValue>{preservica_uuid}</premis:objectIdentifierValue>
-            </premis:objectIdentifier>
-        </premis:object>
-        <premis:rights>
-            <premis:rightsStatement>
-                <premis:rightsStatementIdentifier>
-                    <premis:rightsStatementIdentifierType>rights_uuid</premis:rightsStatementIdentifierType>
-                    <premis:rightsStatementIdentifierValue>{rights_uuid}</premis:rightsStatementIdentifierValue>
-                </premis:rightsStatementIdentifier>
-                <premis:rightsBasis authority="rightsBasis" authorityURI="http://id.loc.gov/vocabulary/preservation/rightsBasis" valueURI="http://id.loc.gov/vocabulary/preservation/rightsBasis/cop">{rights_basis}</premis:rightsBasis>
-                <premis:copyrightInformation>
-                    <premis:copyrightStatus>{rights_status}</premis:copyrightStatus>
-                    <premis:copyrightJurisdiction>{rights_jurisdiction}</premis:copyrightJurisdiction>
-                    <premis:copyrightStatusDeterminationDate>{rights_date}</premis:copyrightStatusDeterminationDate>
-                    <premis:copyrightNote>{rights_note}</premis:copyrightNote>
-                    <premis:copyrightDocumentationIdentifier>
-                        <premis:copyrightDocumentationIdentifierType>{rights_doc_text}</premis:copyrightDocumentationIdentifierType>
-                        <premis:copyrightDocumentationIdentifierValue>{rights_doc_uri}</premis:copyrightDocumentationIdentifierValue>
-                    </premis:copyrightDocumentationIdentifier>
-                </premis:copyrightInformation>
-                <premis:linkingObjectIdentifier>
-                    <premis:linkingObjectIdentifierType>preservica_uuid</premis:linkingObjectIdentifierType>
-                    <premis:linkingObjectIdentifierValue>{preservica_uuid}</premis:linkingObjectIdentifierValue>
-                </premis:linkingObjectIdentifier>
-            </premis:rightsStatement>
-        </premis:rights>
-        <premis:event>
-            <premis:eventIdentifier>
-                <premis:eventIdentifierType>event_uuid</premis:eventIdentifierType>
-                <premis:eventIdentifierValue>{event_1_uuid}</premis:eventIdentifierValue>
-            </premis:eventIdentifier>
-            <premis:eventType>{event_1_type}</premis:eventType>
-            <premis:eventDateTime>{event_1_datetime}</premis:eventDateTime>
-            <premis:eventDetailInformation>
-                <premis:eventDetail>{event_1_details}</premis:eventDetail>
-            </premis:eventDetailInformation>
-            <premis:linkingAgentIdentifier>
-                <premis:linkingAgentIdentifierType>local</premis:linkingAgentIdentifierType>
-                <premis:linkingAgentIdentifierValue>{event_1_agent}</premis:linkingAgentIdentifierValue>
-                <premis:linkingAgentRole authority="eventRelatedAgentRole" authorityURI="http://id.loc.gov/vocabulary/preservation/eventRelatedAgentRole" valueURI="http://id.loc.gov/vocabulary/preservation/eventRelatedAgentRole/imp">implementer</premis:linkingAgentRole>
-            </premis:linkingAgentIdentifier>
-            <premis:linkingObjectIdentifier>
-                <premis:linkingObjectIdentifierType>preservica_uuid</premis:linkingObjectIdentifierType>
-                <premis:linkingObjectIdentifierValue>{preservica_uuid}</premis:linkingObjectIdentifierValue>
-            </premis:linkingObjectIdentifier>
-        </premis:event>
-        <premis:event>
-            <premis:eventIdentifier>
-                <premis:eventIdentifierType>event_uuid</premis:eventIdentifierType>
-                <premis:eventIdentifierValue>{event_2_uuid}</premis:eventIdentifierValue>
-            </premis:eventIdentifier>
-            <premis:eventType>{event_2_type}</premis:eventType>
-            <premis:eventDateTime>{event_2_datetime}</premis:eventDateTime>
-            <premis:eventDetailInformation>
-                <premis:eventDetail>{event_2_details}</premis:eventDetail>
-            </premis:eventDetailInformation>
-            <premis:linkingAgentIdentifier>
-                <premis:linkingAgentIdentifierType>local</premis:linkingAgentIdentifierType>
-                <premis:linkingAgentIdentifierValue>{event_2_agent}</premis:linkingAgentIdentifierValue>
-                <premis:linkingAgentRole authority="eventRelatedAgentRole" authorityURI="http://id.loc.gov/vocabulary/preservation/eventRelatedAgentRole" valueURI="http://id.loc.gov/vocabulary/preservation/eventRelatedAgentRole/imp">implementer</premis:linkingAgentRole>
-            </premis:linkingAgentIdentifier>
-            <premis:linkingObjectIdentifier>
-                <premis:linkingObjectIdentifierType>preservica_uuid</premis:linkingObjectIdentifierType>
-                <premis:linkingObjectIdentifierValue>{preservica_uuid}</premis:linkingObjectIdentifierValue>
-            </premis:linkingObjectIdentifier>
-        </premis:event>
-    </premis:premis>'''
-        asset = client.asset(preservica_uuid)
-        client.add_metadata(asset, "http://www.loc.gov/premis/v3", premis)
-        print(f'{count}: Appended PREMIS metadata to {preservica_uuid}')
-    fhand.close()
-    print(f'appended {count} PREMIS files')
-# premis_generator()
-
-# #this function generates a dictionary of filename:hash values for both the Droid file manifest
-# #and the ingested Preservica assets (using the Preservica API) and then compares the two to
-# #ensure they are identical, and provides a report if that is not the case
-#TODO update Droid CSV file name
-def quality_control():
-    print('---STARTING QA---')
-    asset_count = 0
-    print('----MAKING DROID DICTIONARY---')
-    droiddict = dict()
-    with open(proj_id + '_droid.csv', newline = '') as csvfile:
-        reader = csv.reader(csvfile, delimiter = ',', quotechar = '"')
-        for row in reader: 
-            if 'File' in row[8]:
-                droiddict[row[4]] = row[12]
-    print('---MAKING PRESERVICA DICTIONARY----')
-    client = EntityAPI()
-    preservicalist = list()
-    fhand = open(proj_id + '_refs.csv', 'r')
-    csv_reader = csv.reader(fhand, delimiter=',')
-    for line in csv_reader:
-        preservicalist.append(line[0])
-    fhand.close()
-    preservicadict = dict()
-    for reference in preservicalist:
-        asset = client.asset(reference)
-        asset_count += 1
-        print(f'count: {asset_count} / {len(preservicalist)}')
-        for representation in client.representations(asset):
-            for content_object in client.content_objects(representation):
-                for generation in client.generations(content_object):
-                    for bitstream in generation.bitstreams:
-                        filename = bitstream.filename 
-                        for algorithm,value in bitstream.fixity.items():
-                            preservicadict[filename] = value    
-    print('----COMPARING DICTIONARIES----')            
-    diff = DeepDiff(preservicadict, droiddict, verbose_level=2)
-    if len(diff) == 0:
-        print('QUALITY ASSURANCE PASSED')
-    else:
-        print(diff)
-    # only used for troubleshoooting if comparing dictionaries fails
-    # print('----DROID DICTIONARY----')
-    # print(droiddict)
-    # print('----PRESERVICA DICTIONARY----')
-    # print(preservicadict)
-# quality_control()
-
-# this function generates a dictionary of filename:hash values for both the Droid file manifest and the ingested
-# Preservica assets (using the Preservica API) and then compares the two to ensure they are identical, and creates
-# CSV files of each dictionary if quality control fails so that they can be further compared
-def quality_control_csv():
-    print('---STARTING QA---')
-    asset_count = 0
-    print('----MAKING DROID DICTIONARY---')
-    droiddict = dict()
-    with open(proj_id + '_droid.csv', newline = '') as csvfile:
-        reader = csv.reader(csvfile, delimiter = ',', quotechar = '"')
-        for row in reader: 
-            if 'File' in row[8]:
-                droiddict[row[4]] = row[12]
-    print('---MAKING PRESERVICA DICTIONARY----')
-    client = EntityAPI()
-    preservicalist = list()
-    fhand = open(proj_id + '_refs.csv', 'r')
-    csv_reader = csv.reader(fhand, delimiter=',')
-    for line in csv_reader:
-        preservicalist.append(line[0])
-    fhand.close()
-    preservicadict = dict()
-    for reference in preservicalist:
-        asset = client.asset(reference)
-        asset_count += 1
-        print('count: {} / {}'.format(asset_count, len(preservicalist)))
-        for representation in client.representations(asset):
-            for content_object in client.content_objects(representation):
-                for generation in client.generations(content_object):
-                    for bitstream in generation.bitstreams:
-                        filename = bitstream.filename 
-                        for algorithm,value in bitstream.fixity.items():
-                            preservicadict[filename] = value    
-    print('----COMPARING DICTIONARIES----')            
-    diff = DeepDiff(preservicadict, droiddict, verbose_level=2)
-    if len(diff) == 0:
-        print('QUALITY ASSURANCE PASSED')
-    else:
-        with open(os.path.join(proj_path, proj_id + '_presdict.csv'), 'w', newline = '', encoding = 'utf8') as pres_dict_csv:
-            pres_dict_writer = csv.writer(pres_dict_csv, delimiter=',', quotechar='"')
-            for keys, values in preservicadict.items():
-                pres_dict_writer.writerow([keys, values])
-        with open(os.path.join(proj_path, proj_id + '_droiddict.csv'), 'w', newline = '', encoding = 'utf8') as droid_dict_csv:
-            droid_dict_writer = csv.writer(droid_dict_csv, delimiter=',', quotechar='"')
-            for keys, values in droiddict.items():
-                droid_dict_writer.writerow([keys, values])
-# quality_control_csv()
-
-#-------------------------------------------------------------------------------------------------------------------------------------
-# GENERATING REPORTS AND STATISTICS
-#-------------------------------------------------------------------------------------------------------------------------------------
-
-#this script takes a folder ref for ingested content in Preservica and pulls out data useful
-#in reporting; the script only filters on assets, and reports out the total number of assets
-#in the folder, how many files are within those assets, and the total size in bytes
-def report_folder():
-    print('---PULLING STATS ON INGESTED FOLDER---')
-    client = EntityAPI()
-    assets = 0
-    files = 0
-    size = 0
-    folder_ref = 'c04c7f5e-450d-4051-9394-82ddce47b61b'
-    folder_target = client.folder(folder_ref)
-    for asset in filter(only_assets, client.all_descendants(folder_target.reference)):
-        if 'Project Documentation' in asset.title:
-            continue
-        else:
-            assets += 1
-            print(asset.title)
-            for representation in client.representations(asset):
-                for content_object in client.content_objects(representation):
-                    for generation in client.generations(content_object):
-                        for bitstream in generation.bitstreams:
-                            files += 1
-                            size += bitstream.length
-            print('files:', files, 'size:', size)
-    print('assets:', assets)
-    print('files:', files)
-    print('size:', size)
-# report_folder()
-
-#this script takes an asset ref for ingested content in Preservica and pulls out data useful
-#in reporting; the script reports out how many files are within the single asset, and the total size in bytes
-def report_asset():
-    print('---PULLING STATS ON INGESTED ASSET---')
-    client = EntityAPI()
-    files = 0
-    size = 0
-    asset_ref = '2fc217bc-d1c2-4549-a41a-a1ff8b2595f6'
-    asset = client.asset(asset_ref)
-    for representation in client.representations(asset):
-        for content_object in client.content_objects(representation):
-            for generation in client.generations(content_object):
-                for bitstream in generation.bitstreams:
-                    files += 1
-                    size += bitstream.length
-    print(asset.title)
-    print('files:', files)
-    print('size:', size)
-# report_asset()
-
-#this script takes a list of asset refs for ingested content in Preservica and pulls out data useful
-#in reporting; the script reports out the number of assets in the list, how many files are within all
-#the assets, and the total size in bytes
-def report_assets():
-    print('---PULLING STATS ON INGESTED ASSETS---')
-    client = EntityAPI()
-    files = 0
-    size = 0
-    asset_total = 0
-    assets = ['56a4835c-4065-4953-a071-d3142c038f87', 
-              '29c581a6-0326-4997-a02f-7d304d9d1246']
-    for asset_ref in assets:
-        asset_total += 1
-        asset = client.asset(asset_ref)
-        for representation in client.representations(asset):
-            for content_object in client.content_objects(representation):
-                for generation in client.generations(content_object):
-                    for bitstream in generation.bitstreams:
-                        files += 1
-                        size += bitstream.length
-        print(asset.title)
-    print('assets:', asset_total)
-    print('files:', files)
-    print('size:', size)
-# annual_report_assets()
-
-
-
-
+# Lines 121-123 open up a new file that is named the same as the zip file, except with ".opex" on the very end to indicate that this is the metadata for that zip file, and then writes the data into it
+    opex_path = upload_path.joinpath(title + '.pax.zip.opex')
+    opex_path.write_text(opex, encoding='utf8', newline='')
+    print(f'created OPEX metadata: {opex_path}')
+# Line 8 established a start time for the project, while lines 125-127 create the end time and figure out how much time has elapsed, then prints that out in minutes to the console
+end_time = time.time()
+time_total = round((end_time - start_time) / 60)
+print(f'Total Processing Time: {time_total} mins')
