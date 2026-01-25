@@ -10,6 +10,7 @@ from pathlib import Path
 from datetime import datetime
 from zipfile import ZipFile
 from deepdiff import DeepDiff
+import xml.etree.ElementTree as ET
 from pyPreservica import *
 
 #nonstandard packages:
@@ -812,6 +813,69 @@ def move_assets():
 # GENERATING REPORTS AND STATISTICS
 #-------------------------------------------------------------------------------------------------------------------------------------
 
+# this script pulls the metadata for each ingested collection, creating a CSV file for each folder and its contents
+# this is used for quality assurance by the metadata projects librarian to check the metadata post-ingest
+def preservica_metadata_pull():
+    print('---PULLING METADATA FOR INGESTED COLLECTIONS---')
+    client = EntityAPI()
+    folder_dict = {'b3d7a581-dc77-4b98-b50b-df6504c316a0':'_currents_md_export.csv', 'c1c8a2aa-3be3-4f28-a64f-fdcb3ee22314':'_univrec_md_export.csv'}
+    for folder in folder_dict:
+        print(f'starting metadata pull for folder ref: {folder}')
+        file_name = proj_id + folder_dict[folder]
+        fhand = open(os.path.join(proj_path, file_name), 'w', newline='', encoding='utf8')
+        tag_list = list()
+        tag_list.append('preservica id')
+        csv_writer = csv.writer(fhand, delimiter=',', quotechar='"')
+        count = 0
+        all_assets = filter(only_assets, client.all_descendants(folder))
+        for record in all_assets:
+            if 'Project Documentation' in record.title:
+                continue
+            else:
+                try:
+                    xml_string = client.metadata_for_entity(record, 'http://purl.org/dc/terms/')
+                    xml_tree = ET.fromstring(xml_string)
+                    for elem in xml_tree.iter():
+                        if elem.text != None:
+                            if elem.tag not in tag_list:
+                                tag_list.append(elem.tag)
+                except:
+                    continue
+        csv_writer.writerow(tag_list)
+        print(f'discovered all metadata fields for folder ref: {folder}')
+        for folder in folder_dict:
+            all_assets = filter(only_assets, client.all_descendants(folder))
+            for record in all_assets:
+                if 'Project Documentation' in record.title:
+                    continue
+                else:
+                    try:
+                        record_dict = dict()
+                        xml_string = client.metadata_for_entity(record, 'http://purl.org/dc/terms/')
+                        xml_tree = ET.fromstring(xml_string)
+                        for elem in xml_tree.iter():
+                            if elem.text != None:
+                                if elem.tag not in record_dict:
+                                    record_dict[elem.tag] = elem.text
+                                elif elem.tag in record_dict:
+                                    record_dict[elem.tag] += ' | ' + elem.text
+                        record_list = list()
+                        record_list.append(record.reference)
+                        for tag in tag_list:
+                            try:
+                                record_list.append(record_dict[tag])
+                            except:
+                                record_list.append('')
+                        csv_writer.writerow(record_list)
+                        count += 1
+                        print(count, record.reference)
+                    except:
+                        continue
+        fhand.close()
+        print(f'metadata extraction written to: {file_name}')
+    print('METADATA EXTRACTION COMPLETE')
+# preservica_metadata_pull()
+
 #this script takes a folder ref for ingested content in Preservica and pulls out data useful
 #in reporting; the script only filters on assets, and reports out the total number of assets
 #in the folder, how many files are within those assets, and the total size in bytes
@@ -886,3 +950,4 @@ def report_assets():
     print('files:', files)
     print('size:', size)
 # annual_report_assets()
+
