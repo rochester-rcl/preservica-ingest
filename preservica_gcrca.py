@@ -26,7 +26,6 @@ for dsstore in tiff_path.rglob('*DS_Store'):
 asset_dirs = list()
 tiff_files = tiff_path.rglob('*.tif*')
 for file in tiff_files:
-    print(file)
     if file.parent not in asset_dirs:
         asset_dirs.append(file.parent)
         print(f'added to asset folder list: {file.parent}')
@@ -128,6 +127,7 @@ for pax_obj in upload_path.glob('*'):
 end_time = time.time()
 time_total = round((end_time - start_time) / 60)
 print(f'Total Processing Time: {time_total} mins')
+
 
 
 
