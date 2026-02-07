@@ -403,7 +403,7 @@ def pax_metadata():
             pax_md_hand.close()
         print(f'{metadata_count}: created {folder}.pax.zip.opex')
     print(f'Created {metadata_count} OPEX metdata files for individual assets')
-pax_metadata()
+# pax_metadata()
 
 #this function loops through ever directory in "container" and opens up the OPEX metadata for the asset storing the entire contents in a string variable
 #then the function loops through a text file that was manually created, containing the call number identifier as well as the ArchivesSpace archival object number
@@ -950,4 +950,5 @@ def report_assets():
     print('files:', files)
     print('size:', size)
 # annual_report_assets()
+
 
