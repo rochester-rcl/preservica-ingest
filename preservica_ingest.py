@@ -951,4 +951,40 @@ def report_assets():
     print('size:', size)
 # annual_report_assets()
 
+#this script takes a folder ref for ingested content in Preservica and pulls out data useful
+#in reporting; the script pulls out the Preservica Ref IDs from the ArchivesSpace work order
+#in order to pull stats
+def report_folder_wo():
+    print('---PULLING STATS ON INGESTED FOLDER---')
+    client = EntityAPI()
+    assets = 0
+    files = 0
+    size = 0
+    preservicalist = list()
+    fhand = open(proj_id + '_wo.csv', 'r')
+    csv_reader = csv.reader(fhand, delimiter=',')
+    next(csv_reader)
+    for line in csv_reader:
+        preservicalist.append(line[15])
+    fhand.close()
+    for reference in preservicalist:
+        asset = client.asset(reference)
+        if 'Project Documentation' in asset.title:
+            continue
+        else:
+            assets += 1
+            print(asset.title)
+            for representation in client.representations(asset):
+                for content_object in client.content_objects(representation):
+                    for generation in client.generations(content_object):
+                        for bitstream in generation.bitstreams:
+                            files += 1
+                            size += bitstream.length
+            print('files:', files, 'size:', size)
+    print('assets:', assets)
+    print('files:', files)
+    print('size:', size)
+# report_folder_wo()
+
+
 
