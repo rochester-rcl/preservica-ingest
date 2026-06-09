@@ -355,10 +355,13 @@ def create_pax():
 #-------------------------------------------------------------------------------------------------------------------------------------
 
 #this function creates the OPEX metadata file that accompanies an individual zipped PAX package
-#this function also includes the metadata necessary for ArchivesSpace sync to Preservica
+#this function also includes the metadata necessary for ArchivesSpace sync to Preservica when
+#setting the 'aspace_sync' variable to True
 def pax_metadata():
     print('---CREATING METADATA FILES FOR PAX OBJECTS----')
     metadata_count = 0
+    aspace_sync = False
+    aspace_md = ''
     for folder in os.listdir(path = path_container):
         metadata_count += 1
         path_folder = os.path.join(path_container, folder)
@@ -378,6 +381,8 @@ def pax_metadata():
                 title = re.findall('<dc:title>(.+?)</dc:title>', dmd)[0]
                 desc_md += dmd + '\n'
                 dmd_hand.close()
+            if aspace_sync == True:
+                aspace_md = '<LegacyXIP xmlns="http://preservica.com/LegacyXIP"><AccessionRef>catalogue</AccessionRef></LegacyXIP>\n'
             opex = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     <opex:OPEXMetadata xmlns:opex="http://www.openpreservationexchange.org/opex/v1.0">
         <opex:Properties>
@@ -394,7 +399,7 @@ def pax_metadata():
             </opex:Fixities>
         </opex:Transfer>
         <opex:DescriptiveMetadata>
-            {desc_md}
+            {aspace_md}{desc_md}
         </opex:DescriptiveMetadata>
     </opex:OPEXMetadata>'''
             opex = opex.replace(' & ', ' and ')
