@@ -823,32 +823,31 @@ def move_assets():
 def preservica_metadata_pull():
     print('---PULLING METADATA FOR INGESTED COLLECTIONS---')
     client = EntityAPI()
-    folder_dict = {'b3d7a581-dc77-4b98-b50b-df6504c316a0':'_currents_md_export.csv', 'c1c8a2aa-3be3-4f28-a64f-fdcb3ee22314':'_univrec_md_export.csv'}
-    for folder in folder_dict:
-        print(f'starting metadata pull for folder ref: {folder}')
-        file_name = proj_id + folder_dict[folder]
-        fhand = open(os.path.join(proj_path, file_name), 'w', newline='', encoding='utf8')
+    folder_list = ['c1baa3da-1d37-42a5-8f82-807a1efa16ef']
+    file_path = os.path.join(proj_path, proj_id + '_DCQexport.csv')
+    count = 0
+    with open(file_path, 'w', newline='', encoding='utf-8-sig') as fhand:
         tag_list = list()
         tag_list.append('preservica id')
         csv_writer = csv.writer(fhand, delimiter=',', quotechar='"')
-        count = 0
-        all_assets = filter(only_assets, client.all_descendants(folder))
-        for record in all_assets:
-            if 'Project Documentation' in record.title:
-                continue
-            else:
-                try:
-                    xml_string = client.metadata_for_entity(record, 'http://purl.org/dc/terms/')
-                    xml_tree = ET.fromstring(xml_string)
-                    for elem in xml_tree.iter():
-                        if elem.text != None:
-                            if elem.tag not in tag_list:
-                                tag_list.append(elem.tag)
-                except:
+        for folder in folder_list:
+            all_assets = filter(only_assets, client.all_descendants(folder))
+            for record in all_assets:
+                if 'Project Documentation' in record.title:
                     continue
+                else:
+                    try:
+                        xml_string = client.metadata_for_entity(record, 'http://purl.org/dc/terms/')
+                        xml_tree = ET.fromstring(xml_string)
+                        for elem in xml_tree.iter():
+                            if elem.text != None:
+                                if elem.tag != '{http://purl.org/dc/terms/}dcterms':
+                                    if elem.tag not in tag_list:
+                                        tag_list.append(elem.tag)
+                    except:
+                        continue
         csv_writer.writerow(tag_list)
-        print(f'discovered all metadata fields for folder ref: {folder}')
-        for folder in folder_dict:
+        for folder in folder_list:
             all_assets = filter(only_assets, client.all_descendants(folder))
             for record in all_assets:
                 if 'Project Documentation' in record.title:
@@ -866,7 +865,7 @@ def preservica_metadata_pull():
                                     record_dict[elem.tag] += ' | ' + elem.text
                         record_list = list()
                         record_list.append(record.reference)
-                        for tag in tag_list:
+                        for tag in tag_list[1:]:
                             try:
                                 record_list.append(record_dict[tag])
                             except:
@@ -876,8 +875,15 @@ def preservica_metadata_pull():
                         print(count, record.reference)
                     except:
                         continue
-        fhand.close()
-        print(f'metadata extraction written to: {file_name}')
+
+    new_headers = ''
+    with open(file_path, 'r', newline='', encoding='utf8') as readhand:
+        new_headers = readhand.read()
+        new_headers = new_headers.replace('{http://purl.org/dc/elements/1.1/}', '')
+        new_headers = new_headers.replace('{http://purl.org/dc/terms/}', '')
+    with open(file_path, 'w', newline='', encoding='utf8') as writehand:
+        writehand.write(new_headers)
+        print(f'metadata extraction written to: {file_path}')
     print('METADATA EXTRACTION COMPLETE')
 # preservica_metadata_pull()
 
